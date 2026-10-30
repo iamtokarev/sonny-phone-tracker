@@ -45,6 +45,7 @@ threshold = 0.9
 window_s = 6
 frame_s = 0.08  # openWakeWord scores 80 ms frames
 refractory_s = 2  # one wake per utterance of the phrase
+keep_before_s = 1.2  # audio kept before a wake (the phrase itself); speech before that is never transcribed
 
 [voice]
 stop_poll_s = 0.1

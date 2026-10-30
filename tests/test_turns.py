@@ -13,15 +13,22 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     InputAudioRawFrame,
     LLMContextFrame,
-    TranscriptionFrame,
     VADUserStartedSpeakingFrame,
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.tests.utils import run_test
 from pipecat.turns.types import ProcessFrameResult
 
 from sonny.config import load_config
-from sonny.voice.turns import OwnerTurns, WakeSeen, WakeWordTurnStart, is_bare_wake
+from sonny.voice.turns import (
+    OwnerTurns,
+    WakeHeardFrame,
+    WakeSeen,
+    WakeWordTurnStart,
+    from_wake_phrase,
+    is_bare_wake,
+)
 
 CFG = load_config()
 FRAME = round(CFG.wake.frame_s * CFG.media.audio_sample_rate)
@@ -56,6 +63,18 @@ class Harness:
         self.strategy = WakeWordTurnStart(
             CFG.wake, CFG.media.audio_sample_rate, amplitude_score, self.line, self._on_wake, clock=self.clock
         )
+
+        self.pushed_up: list = []
+        self.resets = 0
+
+        @self.strategy.event_handler("on_reset_aggregation")
+        async def _reset(_strategy):
+            self.resets += 1
+
+        @self.strategy.event_handler("on_push_frame")
+        async def _pushed(_strategy, frame, direction):
+            if direction is FrameDirection.UPSTREAM:
+                self.pushed_up.append(frame)
 
         @self.strategy.event_handler("on_user_turn_started")
         async def _(_strategy, params):
@@ -106,6 +125,18 @@ def test_a_wake_starts_a_turn_and_opens_the_follow_up_window(h):
     h.end_turn()
     h.later(CFG.wake.window_s - 0.5)
     assert h.vad_start() is ProcessFrameResult.CONTINUE
+
+
+def test_a_wake_tells_the_stt_to_drop_the_speech_before_it(h):
+    h.wake()
+    assert [type(f) for f in h.pushed_up] == [WakeHeardFrame]
+
+
+def test_an_ignored_self_wake_trims_nothing(h):
+    h.send(BotStartedSpeakingFrame())
+    h.line.text = "I'm Sonny."
+    h.wake()
+    assert h.pushed_up == []
 
 
 def test_the_window_closes_after_its_seconds(h):
@@ -172,14 +203,33 @@ def test_a_wake_inside_an_open_window_continues_the_conversation(h):
     assert [new for _, new in h.wakes] == [True, False]
 
 
-def test_transcripts_outside_a_turn_are_blanked(h):
-    echo = TranscriptionFrame("why did the scarecrow", "owner", "")
-    assert h.send(echo) is ProcessFrameResult.STOP
-    assert echo.text == ""
+def test_every_turn_start_drops_speech_aggregated_outside_a_turn(h):
+    h.wake()  # chatter transcribed before this wake sits in the aggregator; it must not join the turn
+    h.end_turn()
+    h.vad_start()
+    asyncio.run(h.strategy.handle_user_turn_started())  # the VAD strategy started this one
+    assert h.resets == 2
+
+
+def test_only_a_turn_started_by_a_wake_counts_as_woken(h):
     h.wake()
-    said = TranscriptionFrame("how are you", "owner", "")
-    assert h.send(said) is ProcessFrameResult.CONTINUE
-    assert said.text == "how are you"
+    assert h.strategy.woken_turn
+    h.end_turn()
+    h.vad_start()
+    assert not h.strategy.woken_turn
+
+
+@pytest.mark.parametrize(
+    ("text", "kept"),
+    [
+        ("Blah blah blah. The pasta was great. Hey Sonny. How are you?", "Hey Sonny. How are you?"),
+        ("I told him about it, hey, sunny, how are you", "hey, sunny, how are you"),
+        ("Okay Sony, what time is it", "Okay Sony, what time is it"),
+        ("tell me a joke", "tell me a joke"),  # the wake phrase was misheard: nothing to cut at
+    ],
+)
+def test_text_before_the_wake_phrase_is_cut(text, kept):
+    assert from_wake_phrase(text) == kept
 
 
 @pytest.mark.parametrize(
@@ -198,10 +248,10 @@ def test_bare_wake_is_the_wake_phrase_with_filler_only(text, bare):
 
 
 class Turns:
-    def __init__(self) -> None:
+    def __init__(self, woken: bool = False) -> None:
         self.bare: list[str] = []
         self.said: list[str] = []
-        self.filter = OwnerTurns(on_bare_wake=self.bare.append, on_turn=self.said.append)
+        self.filter = OwnerTurns(on_bare_wake=self.bare.append, on_turn=self.said.append, woken_turn=lambda: woken)
 
     def finish(self, context: LLMContext) -> list:
         down, _ = asyncio.run(run_test(self.filter, frames_to_send=[LLMContextFrame(context)]))
@@ -227,3 +277,25 @@ def test_a_wake_and_command_in_one_breath_pass_as_said():
     turns, context = Turns(), LLMContext([{"role": "user", "content": "Hey Sonny, how are you?"}])
     assert len(turns.finish(context)) == 1
     assert turns.said == ["Hey Sonny, how are you?"] and turns.bare == []
+
+
+def test_a_woken_turn_reaches_the_llm_from_the_wake_phrase_on():
+    turns = Turns(woken=True)
+    context = LLMContext([{"role": "user", "content": "Blah blah, my friend says hi. Hey Sonny, how are you?"}])
+    assert len(turns.finish(context)) == 1
+    assert turns.said == ["Hey Sonny, how are you?"]
+    assert context.get_messages() == [{"role": "user", "content": "Hey Sonny, how are you?"}]
+
+
+def test_chatter_ending_in_the_wake_phrase_is_a_bare_wake():
+    turns = Turns(woken=True)
+    context = LLMContext([{"role": "user", "content": "Blah blah blah, the pasta was great. Hey Sonny."}])
+    assert turns.finish(context) == []
+    assert turns.said == [] and context.get_messages() == []
+
+
+def test_a_follow_up_turn_in_the_window_is_kept_whole():
+    turns = Turns(woken=False)
+    context = LLMContext([{"role": "user", "content": "My son says hi, by the way."}])
+    turns.finish(context)
+    assert turns.said == ["My son says hi, by the way."]

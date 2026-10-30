@@ -77,6 +77,7 @@ class Wake:
     window_s: float
     frame_s: float
     refractory_s: float
+    keep_before_s: float
 
 
 @dataclass(frozen=True)

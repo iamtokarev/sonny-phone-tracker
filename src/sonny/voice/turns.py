@@ -5,8 +5,16 @@
 - A VAD turn start passes only inside the window and never while Sonny speaks.
 - After every line from Sonny the window reopens, so a reply needs no second wake.
 - A wake is ignored while Sonny speaks a line containing "Sonny" (the self-wake guard).
-- Transcripts arriving outside a turn (idle chatter, Sonny's own echo) are blanked.
-- A finished turn that is only the wake phrase is dropped before the LLM (`OwnerTurns`).
+
+Speech not meant for Sonny (talk to someone else) never reaches the LLM:
+- every turn start resets the user aggregator, which has already collected any transcripts from
+  outside a turn;
+- a wake sends `WakeHeardFrame` up to the STT, which drops the audio from before the wake phrase in the
+  same breath (`WakeTrimmedSTT`);
+- that misses a wake phrase that closes a breath (the segment is already transcribing), so a turn
+  started by a wake is also cut, as text, at the wake phrase (`OwnerTurns`).
+
+A finished turn that is only the wake phrase is dropped before the LLM (`OwnerTurns`).
 """
 
 import re
@@ -18,11 +26,10 @@ import numpy as np
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    ControlFrame,
     Frame,
     InputAudioRawFrame,
-    InterimTranscriptionFrame,
     LLMContextFrame,
-    TranscriptionFrame,
     VADUserStartedSpeakingFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -35,10 +42,22 @@ SONNY_NAME = re.compile(r"sonny", re.I)
 # A turn that is only the wake phrase, maybe with filler: the owner paused after "Hey Sonny".
 _WAKE_NAME = re.compile(r"sonn|sunn|sony|soni", re.I)
 _BARE_WAKE = re.compile(r"^(?:\W|hey|hi|hay|okay|ok|so|yeah|yes|um+|uh+|ah|sonny|sunny|sony|soni|sonnie|son)*$", re.I)
+_WAKE_PHRASE = re.compile(r"(?:\b(?:hey|hi|hay|okay|ok)\W+)?\b(?:sonn|sunn|sony|soni)\w*", re.I)
 
 
 def is_bare_wake(text: str) -> bool:
     return bool(_BARE_WAKE.match(text) and _WAKE_NAME.search(text))
+
+
+def from_wake_phrase(text: str) -> str:
+    """The text from the first wake phrase on; all of it when the phrase was misheard past matching."""
+    match = _WAKE_PHRASE.search(text)
+    return text[match.start() :] if match else text
+
+
+@dataclass
+class WakeHeardFrame(ControlFrame):
+    """Sent upstream on a wake: the STT drops the audio it holds from before the wake phrase."""
 
 
 @dataclass(frozen=True)
@@ -70,6 +89,7 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
         self._open_until = -float("inf")
         self.bot_speaking = False
         self.in_turn = False
+        self.woken_turn = False  # the current (or last) turn was started by a wake, not by VAD in the window
 
     @property
     def window_open(self) -> bool:
@@ -80,6 +100,7 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
 
     async def handle_user_turn_started(self) -> None:
         self.in_turn = True
+        await self.trigger_reset_aggregation()
 
     async def handle_user_turn_stopped(self) -> None:
         self.in_turn = False
@@ -92,12 +113,11 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self.bot_speaking = False
             self.reopen_window()
-        elif isinstance(frame, (TranscriptionFrame, InterimTranscriptionFrame)):
-            if not self.in_turn:
-                frame.text = ""
+        elif isinstance(frame, VADUserStartedSpeakingFrame):
+            if self.bot_speaking or not self.window_open:
                 return ProcessFrameResult.STOP
-        elif isinstance(frame, VADUserStartedSpeakingFrame) and (self.bot_speaking or not self.window_open):
-            return ProcessFrameResult.STOP
+            if not self.in_turn:
+                self.woken_turn = False
         return ProcessFrameResult.CONTINUE
 
     async def _audio(self, frame: InputAudioRawFrame) -> ProcessFrameResult:
@@ -116,24 +136,33 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
             new = not (self.bot_speaking or self.in_turn or self.window_open)
             self._on_wake(WakeSeen(score, ignored=False, barge_in=self.bot_speaking, new_conversation=new))
             self.reopen_window()
+            await self.push_frame(WakeHeardFrame(), FrameDirection.UPSTREAM)
             if not self.in_turn:
+                self.woken_turn = True
                 await self.trigger_user_turn_started(enable_interruptions=True)
             result = ProcessFrameResult.STOP
         return result
 
 
 class OwnerTurns(FrameProcessor):
-    """Sits right after the user aggregator. Drops bare-wake turns from the context and reports each
-    finished owner turn; a context left with no owner turn to answer goes no further."""
+    """Sits right after the user aggregator. Cuts a woken turn at the wake phrase, drops bare-wake turns
+    from the context and reports each finished owner turn; a context left with no owner turn to answer
+    goes no further."""
 
-    def __init__(self, on_bare_wake: Callable[[str], None], on_turn: Callable[[str], None]) -> None:
+    def __init__(
+        self, on_bare_wake: Callable[[str], None], on_turn: Callable[[str], None], woken_turn: Callable[[], bool]
+    ) -> None:
         super().__init__()
-        self._on_bare_wake, self._on_turn = on_bare_wake, on_turn
+        self._on_bare_wake, self._on_turn, self._woken_turn = on_bare_wake, on_turn, woken_turn
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, LLMContextFrame):
             messages = list(frame.context.get_messages())  # set_messages() reuses the list
+            said = owner_text(messages[-1]) if messages else None
+            if said is not None and self._woken_turn():
+                messages[-1] = {"role": "user", "content": from_wake_phrase(said)}
+                frame.context.set_messages(list(messages))
             kept = [m for m in messages if not is_bare_wake(owner_text(m) or "")]
             if len(kept) < len(messages):
                 frame.context.set_messages(kept)

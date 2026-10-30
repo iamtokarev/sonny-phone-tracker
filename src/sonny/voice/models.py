@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.pocket_tts.tts import PocketTTSService
 from pipecat.services.settings import STTSettings
 from pipecat.services.stt_service import SegmentedSTTService
@@ -17,6 +18,7 @@ from pipecat.transcriptions.language import Language
 from pipecat.utils.time import time_now_iso8601
 
 from sonny.config import Stt, Tts, Wake
+from sonny.voice.turns import WakeHeardFrame
 
 
 def load_wake_scorer(cfg: Wake) -> Callable[[np.ndarray], float]:
@@ -39,13 +41,30 @@ def load_wake_scorer(cfg: Wake) -> Callable[[np.ndarray], float]:
     return score
 
 
-class ParakeetSTT(SegmentedSTTService):
+class WakeTrimmedSTT(SegmentedSTTService):
+    """A segmented STT that, on a wake, keeps only the last `keep_before_s` of the segment so far: the
+    wake phrase. Owner speech before the phrase (talk to someone else) never becomes text."""
+
+    def __init__(self, wake: Wake, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._keep_before_s = wake.keep_before_s
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        if isinstance(frame, WakeHeardFrame):
+            keep = round(self._keep_before_s * self.sample_rate) * 2  # 16-bit mono
+            del self._audio_buffer[: max(0, len(self._audio_buffer) - keep)]
+            return
+        await super().process_frame(frame, direction)
+
+
+class ParakeetSTT(WakeTrimmedSTT):
     """Parakeet TDT on MLX as a segmented STT service: it gets each VAD segment as 16-bit PCM."""
 
-    def __init__(self, cfg: Stt, **kwargs) -> None:
+    def __init__(self, cfg: Stt, wake: Wake, **kwargs) -> None:
         from parakeet_mlx import from_pretrained
 
         super().__init__(
+            wake,
             settings=STTSettings(model=cfg.model, language=Language(cfg.language)),
             ttfs_p99_latency=cfg.ttfs_p99_s,
             **kwargs,

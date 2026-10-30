@@ -180,9 +180,11 @@ class VoicePipeline:
         pipeline = Pipeline(
             [
                 transport.input(),
-                ParakeetSTT(cfg.stt),
+                ParakeetSTT(cfg.stt, cfg.wake),
                 user,
-                OwnerTurns(on_bare_wake=bare_wake, on_turn=self.conversation.on_turn),
+                OwnerTurns(
+                    on_bare_wake=bare_wake, on_turn=self.conversation.on_turn, woken_turn=lambda: self.wake.woken_turn
+                ),
                 llm,
                 line,
                 pocket_tts(cfg.tts),
