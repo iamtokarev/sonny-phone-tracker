@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+
+# Local planning work, spikes and agent state (kept off the repo)
+.scratch/
+.remember/
+.claude/settings.local.json
+
+# Sonny session logs
+logs/
+
+# macOS
+.DS_Store
