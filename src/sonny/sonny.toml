@@ -22,20 +22,33 @@ dir = "logs"
 
 [llm]
 model = "anthropic/claude-haiku-5.5"
+api_key_env = "OPENROUTER_API_KEY"  # read from the environment or the repo-root .env
+temperature = 0.6
 sdk_max_retries = 2
 retry_timeout_s = 3
 wakeup_cap_s = 15
 
 [stt]
-model = "parakeet-tdt-0.6b-v2"
+model = "mlx-community/parakeet-tdt-0.6b-v2"  # Parakeet TDT 0.6B v2 on MLX, English only
+language = "en"
+ttfs_p99_s = 1.0  # speech end to final transcript, as the turn-stop strategy assumes; ticket 16 ran with this
 
 [tts]
 voice = "alba"
 queue_ahead_s = 0.12
 
 [wake]
+model_repo = "iamtokarev/hey-sonny-wake-word"
+model_revision = "ad4597d3fe83a0a1b36f2c1ee612378e0a36e246"  # pinned Hub commit
+model_file = "hey_sonny.onnx"
 threshold = 0.9
 window_s = 6
+frame_s = 0.08  # openWakeWord scores 80 ms frames
+refractory_s = 2  # one wake per utterance of the phrase
+
+[voice]
+stop_poll_s = 0.1
+input_poll_s = 0.1
 
 [vad]
 end_of_turn_s = 0.6

@@ -48,6 +48,8 @@ class Log:
 @dataclass(frozen=True)
 class Llm:
     model: str
+    api_key_env: str
+    temperature: float
     sdk_max_retries: int
     retry_timeout_s: float
     wakeup_cap_s: float
@@ -56,6 +58,8 @@ class Llm:
 @dataclass(frozen=True)
 class Stt:
     model: str
+    language: str
+    ttfs_p99_s: float
 
 
 @dataclass(frozen=True)
@@ -66,8 +70,19 @@ class Tts:
 
 @dataclass(frozen=True)
 class Wake:
+    model_repo: str
+    model_revision: str
+    model_file: str
     threshold: float
     window_s: float
+    frame_s: float
+    refractory_s: float
+
+
+@dataclass(frozen=True)
+class Voice:
+    stop_poll_s: float
+    input_poll_s: float
 
 
 @dataclass(frozen=True)
@@ -170,6 +185,7 @@ class Config:
     stt: Stt
     tts: Tts
     wake: Wake
+    voice: Voice
     vad: Vad
     phone: Phone
     phone_use: PhoneUse
