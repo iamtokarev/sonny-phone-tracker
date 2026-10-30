@@ -4,6 +4,10 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "opencv-python>=5.0.0.93",
+    "openwakeword>=0.6.0",
+    "parakeet-mlx>=0.5.3",
+    "pipecat-ai[openrouter,pocket-tts,silero]>=1.14",
+    "python-dotenv>=1.2",
     "reachy-mini==1.11.0",
 ]
 keywords = ["reachy-mini-app"]
@@ -27,9 +31,7 @@ experiments = [
     "coremltools>=8.0,<10.0",
     "onnx>=1.16,<2",
     "onnxruntime>=1.27.0",
-    "openwakeword>=0.6.0",
-    "parakeet-mlx>=0.5.3",
-    "pipecat-ai[kokoro,mlx-whisper,openrouter,pocket-tts,silero]>=1.12",
+    "pipecat-ai[kokoro,mlx-whisper,openrouter,pocket-tts,silero]>=1.14",
     "psutil>=7.2.2",
     "rfdetr>=1.11.2",
 ]

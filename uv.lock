@@ -1759,6 +1759,10 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "opencv-python" },
+    { name = "openwakeword" },
+    { name = "parakeet-mlx" },
+    { name = "pipecat-ai", extra = ["pocket-tts"] },
+    { name = "python-dotenv" },
     { name = "reachy-mini" },
 ]
 
@@ -1771,8 +1775,6 @@ experiments = [
     { name = "coremltools" },
     { name = "onnx" },
     { name = "onnxruntime" },
-    { name = "openwakeword" },
-    { name = "parakeet-mlx" },
     { name = "pipecat-ai", extra = ["kokoro", "mlx-whisper", "pocket-tts"] },
     { name = "psutil" },
     { name = "rfdetr" },
@@ -1781,6 +1783,10 @@ experiments = [
 [package.metadata]
 requires-dist = [
     { name = "opencv-python", specifier = ">=5.0.0.93" },
+    { name = "openwakeword", specifier = ">=0.6.0" },
+    { name = "parakeet-mlx", specifier = ">=0.5.3" },
+    { name = "pipecat-ai", extras = ["openrouter", "pocket-tts", "silero"], specifier = ">=1.14" },
+    { name = "python-dotenv", specifier = ">=1.2" },
     { name = "reachy-mini", specifier = "==1.11.0" },
 ]
 
@@ -1793,9 +1799,7 @@ experiments = [
     { name = "coremltools", specifier = ">=8.0,<10.0" },
     { name = "onnx", specifier = ">=1.16,<2" },
     { name = "onnxruntime", specifier = ">=1.27.0" },
-    { name = "openwakeword", specifier = ">=0.6.0" },
-    { name = "parakeet-mlx", specifier = ">=0.5.3" },
-    { name = "pipecat-ai", extras = ["kokoro", "mlx-whisper", "openrouter", "pocket-tts", "silero"], specifier = ">=1.12" },
+    { name = "pipecat-ai", extras = ["kokoro", "mlx-whisper", "openrouter", "pocket-tts", "silero"], specifier = ">=1.14" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "rfdetr", specifier = ">=1.11.2" },
 ]
