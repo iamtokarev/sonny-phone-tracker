@@ -82,3 +82,26 @@ def test_wake_and_owner_turns_reach_the_bus_and_the_log(log):
     ]
     assert seen.empty()  # an ignored self-wake is logged only
     assert records(log)[-1] | {"ts": 0} == {"ts": 0, "type": "wake", "score": 0.93, "ignored": "self_wake"}
+
+
+def test_a_line_cut_off_by_a_barge_in_stays_in_the_context(log):
+    c = IdleConversation(log, EventBus())
+    owner_says(c, "tell me a story about a cat")
+    c.on_llm_call(call())
+    story = "Once upon a time, a cat sat on a keyboard."
+    c.on_line(SpokenLine(story, 1.0, 2.0, interrupted=True))  # the aggregator had nothing spoken to add
+    owner_says(c, "Hey Sonny, stop it.")
+    assert [m["content"] for m in c.context.get_messages() if isinstance(m, dict)] == [
+        "tell me a story about a cat",
+        story,
+        "Hey Sonny, stop it.",
+    ]
+
+
+def test_a_cut_off_line_the_aggregator_kept_is_not_added_twice(log):
+    c = IdleConversation(log, EventBus())
+    owner_says(c, "tell me a story about a cat")
+    story = "Once upon a time, a cat sat on a keyboard."
+    c.context.add_message({"role": "assistant", "content": story})
+    c.on_line(SpokenLine(story, 1.0, 2.0, interrupted=True))
+    assert len(c.context.get_messages()) == 2

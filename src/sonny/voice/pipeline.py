@@ -134,6 +134,16 @@ class IdleConversation:
     def on_line(self, line: SpokenLine) -> None:
         self._write("line", **asdict(line))
         self._replying = False
+        if line.interrupted and line.text:
+            self._keep_cut_off_line(line.text)
+
+    def _keep_cut_off_line(self, text: str) -> None:
+        """A barge-in can leave the aggregator nothing spoken to add (Pocket TTS sends no word timing).
+        Keep the line, so the agent knows the owner's next words cut it off ("stop" means stop talking)."""
+        messages = self.context.get_messages()
+        last = messages[-1] if messages else None
+        if not (isinstance(last, dict) and last.get("role") == "assistant"):
+            self.context.add_message({"role": "assistant", "content": text})
 
 
 class VoicePipeline:
