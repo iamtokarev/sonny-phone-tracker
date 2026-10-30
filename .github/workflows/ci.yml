@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format (pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.12.5"
+      - run: uvx --python 3.12 pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    name: Unit tests
+    # The lockfile is macOS-only (ADR 0001: everything runs on the Mac).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.12.5"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -q
