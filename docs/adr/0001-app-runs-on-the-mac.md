@@ -1,0 +1,3 @@
+# The app runs on the Mac; Sonny only runs its built-ins
+
+Reachy Mini apps normally install and run on the robot, but Sonny's Raspberry Pi CM4 (4 GB RAM, camera alone ~40% of a core) can't run phone detection and a voice agent alongside the daemon. So the whole app runs on the owner's MacBook and drives Sonny over the LAN (WebSocket commands, WebRTC camera and audio). Sonny does only what its daemon already provides: face tracking, recorded emotion playback, wobble, mic and speaker. Publishing to Spaces is out of scope for v1, so not being launchable from the robot's app store costs nothing yet.
