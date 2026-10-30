@@ -1,0 +1,100 @@
+# Sonny's config: every number the app uses lives here, never in code (spec §12).
+# Point SONNY_CONFIG at a copy of this file to override it; the copy must keep every key.
+
+[robot]
+host = "reachy-mini.local"
+port = 8000
+http_timeout_s = 3
+volume = 62
+
+[startup]
+speaker_wait_timeout_s = 60
+speaker_poll_s = 0.2
+
+[media]
+audio_sample_rate = 16000
+audio_queue_max = 500
+reader_idle_sleep_s = 0.005
+reader_join_timeout_s = 2
+
+[log]
+dir = "logs"
+
+[llm]
+model = "anthropic/claude-haiku-5.5"
+sdk_max_retries = 2
+retry_timeout_s = 3
+wakeup_cap_s = 15
+
+[stt]
+model = "parakeet-tdt-0.6b-v2"
+
+[tts]
+voice = "alba"
+queue_ahead_s = 0.12
+
+[wake]
+threshold = 0.9
+window_s = 6
+
+[vad]
+end_of_turn_s = 0.6
+
+[phone]
+min_conf = 0.5
+min_inside_person = 0.30
+parked_motion = 0.005  # share of frame width
+parked_window_s = 10
+
+[phone_use]
+start_share = 0.60
+start_window_s = 8
+end_share = 0.20
+end_window_s = 5
+
+[window]
+min_frame_share = 0.5
+
+[away]
+start_s = 60
+end_presence_s = 3
+max_nudges_per_episode = 2
+
+[blind]
+freeze_s = 5
+reconnect_every_s = 5
+restored_event_after_s = 30
+
+[frame]
+pitch_deg = 0
+
+[reframe]
+offcentre = 0.15
+hold_s = 3
+gain_per_deg = 0.0082
+
+[sweep]
+after_no_person_s = 10
+speed_dps = 40
+yaw_range = "full"  # the head's full yaw range
+
+[session]
+duration_default_min = 25
+duration_min_min = 5
+duration_max_min = 120
+extend_default_min = 10
+extend_grace_min = 2
+pause_max_min = 30
+
+[excuse]
+default_min = 5
+
+[nudge]
+min_gap_s = 15
+
+[followup]
+min_delay_s = 20
+
+[hooks]
+max_active = 5
+min_refire_s = 60

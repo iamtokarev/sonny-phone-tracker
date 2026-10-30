@@ -1756,7 +1756,7 @@ wheels = [
 [[package]]
 name = "sonny"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "opencv-python" },
     { name = "reachy-mini" },

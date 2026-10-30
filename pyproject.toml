@@ -6,6 +6,17 @@ dependencies = [
     "opencv-python>=5.0.0.93",
     "reachy-mini==1.11.0",
 ]
+keywords = ["reachy-mini-app"]
+
+[project.scripts]
+sonny = "sonny.main:main"
+
+[project.entry-points."reachy_mini_apps"]
+sonny = "sonny.main:Sonny"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -26,6 +37,9 @@ experiments = [
 [tool.uv]
 # Everything runs on the Mac (ADR 0001); openwakeword 0.6 needs tflite-runtime on Linux, which has no py3.12 wheels.
 environments = ["sys_platform == 'darwin'"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
