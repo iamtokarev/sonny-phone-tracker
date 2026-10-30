@@ -9,7 +9,15 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
-from pipecat.frames.frames import ErrorFrame, Frame, TranscriptionFrame
+from pipecat.frames.frames import (
+    ErrorFrame,
+    Frame,
+    TranscriptionFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
+    VADUserStartedSpeakingFrame,
+    VADUserStoppedSpeakingFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.pocket_tts.tts import PocketTTSService
 from pipecat.services.settings import STTSettings
@@ -41,23 +49,44 @@ def load_wake_scorer(cfg: Wake) -> Callable[[np.ndarray], float]:
     return score
 
 
-class WakeTrimmedSTT(SegmentedSTTService):
-    """A segmented STT that, on a wake, keeps only the last `keep_before_s` of the segment so far: the
-    wake phrase. Owner speech before the phrase (talk to someone else) never becomes text."""
+class TurnGatedSTT(SegmentedSTTService):
+    """A segmented STT that transcribes only owner turns, so talk to someone else never becomes text.
+
+    - A VAD segment is transcribed only if an owner turn was open at some point during it (the user
+      aggregator broadcasts turn starts and stops upstream).
+    - On a wake, it keeps only the last `keep_before_s` of the segment so far: the wake phrase, without
+      what was said before it in the same breath.
+    """
 
     def __init__(self, wake: Wake, **kwargs) -> None:
         super().__init__(**kwargs)
         self._keep_before_s = wake.keep_before_s
+        self._turn_open = False
+        self._segment_in_turn = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         if isinstance(frame, WakeHeardFrame):
             keep = round(self._keep_before_s * self.sample_rate) * 2  # 16-bit mono
             del self._audio_buffer[: max(0, len(self._audio_buffer) - keep)]
             return
+        if isinstance(frame, UserStartedSpeakingFrame):
+            self._turn_open = True
+            self._segment_in_turn |= self._user_speaking
+        elif isinstance(frame, UserStoppedSpeakingFrame):
+            self._turn_open = False
+        elif isinstance(frame, VADUserStartedSpeakingFrame):
+            self._segment_in_turn = self._turn_open
         await super().process_frame(frame, direction)
 
+    async def _handle_user_stopped_speaking(self, frame: VADUserStoppedSpeakingFrame) -> None:
+        if not self._segment_in_turn:
+            self._user_speaking = False
+            self._audio_buffer.clear()
+            return
+        await super()._handle_user_stopped_speaking(frame)
 
-class ParakeetSTT(WakeTrimmedSTT):
+
+class ParakeetSTT(TurnGatedSTT):
     """Parakeet TDT on MLX as a segmented STT service: it gets each VAD segment as 16-bit PCM."""
 
     def __init__(self, cfg: Stt, wake: Wake, **kwargs) -> None:

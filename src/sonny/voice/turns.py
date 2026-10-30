@@ -7,10 +7,11 @@
 - A wake is ignored while Sonny speaks a line containing "Sonny" (the self-wake guard).
 
 Speech not meant for Sonny (talk to someone else) never reaches the LLM:
-- every turn start resets the user aggregator, which has already collected any transcripts from
-  outside a turn;
+- the STT transcribes only segments an owner turn was open for (`TurnGatedSTT`);
+- every turn start also resets the user aggregator, which collects transcripts before any strategy
+  sees them;
 - a wake sends `WakeHeardFrame` up to the STT, which drops the audio from before the wake phrase in the
-  same breath (`WakeTrimmedSTT`);
+  same breath;
 - that misses a wake phrase that closes a breath (the segment is already transcribing), so a turn
   started by a wake is also cut, as text, at the wake phrase (`OwnerTurns`).
 
