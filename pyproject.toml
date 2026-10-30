@@ -8,6 +8,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "pytest>=9.2.0",
+]
 experiments = [
     "coremltools>=8.0,<10.0",
     "onnx>=1.16,<2",
@@ -22,3 +26,10 @@ experiments = [
 [tool.uv]
 # Everything runs on the Mac (ADR 0001); openwakeword 0.6 needs tflite-runtime on Linux, which has no py3.12 wheels.
 environments = ["sys_platform == 'darwin'"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
