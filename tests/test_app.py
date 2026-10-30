@@ -13,9 +13,20 @@ from tests.fakes import FakeMedia, FakeMini
 CFG = load_config()
 
 
+class FakeVoice:
+    """Stands in for the voice pipeline: ready at once, then runs until the app stops."""
+
+    def __init__(self, *_args) -> None:
+        pass
+
+    async def run(self, stop, on_ready) -> None:
+        on_ready()
+        stop.wait()
+
+
 @pytest.fixture
 def app(tmp_path):
-    return Sonny(CFG, log=SessionLog(tmp_path))
+    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice)
 
 
 def speaker_up_after(fake: FakeMedia, seconds: float) -> None:
@@ -60,7 +71,7 @@ def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, capsys):
 
     cfg = dataclasses.replace(CFG, startup=dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.1))
     mini = FakeMini()
-    Sonny(cfg, log=SessionLog(tmp_path)).run(mini, threading.Event())
+    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice).run(mini, threading.Event())
     out = capsys.readouterr().out
     assert "ready" not in out and "speaker" in out
     assert mini.calls[-1] == "goto_sleep"
@@ -103,7 +114,17 @@ def test_readers_stop_even_if_the_robot_fails_at_quit(app, capsys):
     assert not readers_alive()
 
 
+def test_main_refuses_without_an_llm_key(monkeypatch, capsys):
+    monkeypatch.setattr(main_mod, "load_dotenv", lambda *_: None)
+    monkeypatch.delenv(CFG.llm.api_key_env, raising=False)
+    monkeypatch.setattr(main_mod, "check_startup", lambda *_: pytest.fail("must not reach the daemon"))
+    assert main_mod.main() == 1
+    assert CFG.llm.api_key_env in capsys.readouterr().out
+
+
 def test_main_refuses_and_exits_before_connecting(monkeypatch, capsys):
+    monkeypatch.setenv(CFG.llm.api_key_env, "test-key")
+
     def refuse(*_):
         raise StartupError("A dashboard app is running on Sonny: stop marionette in Sonny's dashboard first.")
 

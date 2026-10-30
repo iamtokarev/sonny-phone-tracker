@@ -1,12 +1,16 @@
-"""Sonny: a Mac-run ReachyMiniApp (spec §2). Boots to "ready" and quits cleanly.
+"""Sonny: a Mac-run ReachyMiniApp (spec §2). Boots to "ready", holds idle voice conversations, quits cleanly.
 
 Run with `uv run sonny` from a terminal that has macOS Local Network permission.
 """
 
+import asyncio
+import os
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any, Protocol
 
+from dotenv import find_dotenv, load_dotenv
 from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
@@ -16,15 +20,29 @@ from sonny.media import MediaHub
 from sonny.session_log import SessionLog
 
 
+class VoiceLoop(Protocol):
+    def run(self, stop: threading.Event, on_ready: Callable[[], None]) -> Coroutine[Any, Any, None]: ...
+
+
+VoiceFactory = Callable[[Config, MediaHub, SessionLog, EventBus], VoiceLoop]
+
+
+def make_voice(cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus) -> VoiceLoop:
+    from sonny.voice.pipeline import VoicePipeline  # loads Pipecat and the models only when the app runs
+
+    return VoicePipeline(cfg, hub, log, bus, api_key=os.environ[cfg.llm.api_key_env])
+
+
 class Sonny(ReachyMiniApp):
     custom_app_url: str | None = None  # no settings page, no web server
     request_media_backend: str | None = None
 
-    def __init__(self, cfg: Config, log: SessionLog | None = None) -> None:
+    def __init__(self, cfg: Config, log: SessionLog | None = None, voice: VoiceFactory = make_voice) -> None:
         super().__init__()
         self.cfg = cfg
         self.bus = EventBus()
         self.log = log or SessionLog(cfg.log.dir)
+        self._make_voice = voice
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event) -> None:
         hub = MediaHub(reachy_mini, self.cfg.media, self.cfg.startup)
@@ -39,8 +57,8 @@ class Sonny(ReachyMiniApp):
                         "restart the app."
                     )
                 return
-            print("ready", flush=True)
-            stop_event.wait()
+            voice = self._make_voice(self.cfg, hub, self.log, self.bus)
+            asyncio.run(voice.run(stop_event, lambda: print("ready", flush=True)))
         finally:
             self._quit(reachy_mini, hub)
 
@@ -63,6 +81,10 @@ def _step(name: str, fn: Callable[[], object]) -> None:
 
 def main() -> int:
     cfg = load_config()
+    load_dotenv(find_dotenv(usecwd=True))  # the repo-root .env holds the LLM key
+    if not os.environ.get(cfg.llm.api_key_env):
+        print(f"{cfg.llm.api_key_env} is not set; put it in the repo-root .env.")
+        return 1
     try:
         check_startup(
             DaemonClient(f"http://{cfg.robot.host}:{cfg.robot.port}", cfg.robot.http_timeout_s), sdk_version()
