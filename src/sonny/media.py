@@ -47,6 +47,22 @@ class MediaHub:
         with self._lock:
             return self._frame, self._frame_t
 
+    @property
+    def input_sample_rate(self) -> int:
+        return self.cfg.audio_sample_rate  # start() refuses a mic at any other rate
+
+    @property
+    def output_sample_rate(self) -> int:
+        return self.mini.media.get_output_audio_samplerate()
+
+    def play(self, samples: np.ndarray) -> None:
+        """Queue float32 mono samples on Sonny's speaker. Returns at once: pace the calls in real time."""
+        self.mini.media.push_audio_sample(samples)
+
+    def clear_speaker(self) -> None:
+        """Drop audio already queued on Sonny's speaker (barge-in)."""
+        self.mini.media.audio.clear_player()
+
     def start(self) -> None:
         rate = self.mini.media.get_input_audio_samplerate()
         if rate != self.cfg.audio_sample_rate:

@@ -9,6 +9,10 @@ import numpy as np
 class FakeAudio:
     def __init__(self) -> None:
         self._appsrc = None  # the WebRTC speaker send chain; set once it is up
+        self.clears = 0
+
+    def clear_player(self) -> None:
+        self.clears += 1
 
 
 class FakeMedia:
@@ -28,6 +32,8 @@ class FakeMedia:
         self._frames = iter(np.full((2, 2, 3), i, np.uint8) for i in range(frames))
         self.calls: list[str] = []
         self.calls_after_stop = 0
+        self.output_sample_rate = 16000
+        self.played: list[np.ndarray] = []
         self.stopped = threading.Event()
         self._lock = threading.Lock()
 
@@ -45,6 +51,12 @@ class FakeMedia:
 
     def get_input_audio_samplerate(self) -> int:
         return self.sample_rate
+
+    def get_output_audio_samplerate(self) -> int:
+        return self.output_sample_rate
+
+    def push_audio_sample(self, samples) -> None:
+        self.played.append(samples)
 
     def get_audio_sample(self):
         self._call("get_audio_sample")
