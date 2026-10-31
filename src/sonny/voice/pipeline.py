@@ -90,10 +90,12 @@ class Conversation:
     """The agent's context and the log records of the voice loop.
 
     Owner turns and conductor events reach the context as JSON wake-ups (`Conductor`). The context of an
-    idle conversation is dropped when it ends: the next wake that finds no window open and no reply on its
-    way starts a fresh one. A Focus Session keeps one context from the conversation that started it until
-    the session closes. A failed wake-up is cut from the context at the next owner turn, after the
-    assistant aggregator has added whatever partial reply it got (spec §7).
+    idle conversation is dropped when it ends: a wake that finds no window open, no reply on its way, and
+    nothing said for `keep_s` starts a fresh one. (The window decides what Sonny listens to; `keep_s` how
+    long it remembers, so a wake just after a silent "stop" still continues the conversation.) A Focus
+    Session keeps one context from the conversation that started it until the session closes. A failed
+    wake-up is cut from the context at the next owner turn, after the assistant aggregator has added
+    whatever partial reply it got (spec §7).
     """
 
     def __init__(
@@ -104,12 +106,17 @@ class Conversation:
         activity: AgentActivity,
         session: Callable[[], int | None],
         tools: SessionTools | None = None,
+        *,
+        keep_s: float,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.context = LLMContext(tools=tools.tools) if tools is not None else LLMContext()
         self._tools = tools
         self._log, self._bus, self._conductor, self._activity = log, bus, conductor, activity
         self._session = session  # the open Focus Session's number, or None
         self._context_session: int | None = None  # the session this context belongs to
+        self._keep_s, self._clock = keep_s, clock
+        self._last_said = -float("inf")  # clock time of the last turn, wake-up, LLM call or line
         self._replying = False  # a wake-up went to the LLM and Sonny hasn't finished answering it
         self._failed_from: int | None = None  # where a failed wake-up starts in the context
         self._cut_line: str | None = None  # the last line, cut off by a barge-in
@@ -125,7 +132,8 @@ class Conversation:
         if seen.ignored:
             self._write(EventType.WAKE, score=seen.score, ignored="self_wake")
             return
-        if seen.new_conversation and not self._replying and self._context_session is None:
+        ended = self._clock() - self._last_said > self._keep_s
+        if seen.new_conversation and ended and not self._replying and self._context_session is None:
             self.context.set_messages([])
             self._failed_from = None
             self._write("idle_conversation_started")
@@ -158,6 +166,7 @@ class Conversation:
 
     def _begin(self, message: LLMStandardMessage) -> None:
         self._write("wakeup", payload=wakeup_payload(message))
+        self._last_said = self._clock()
         if self._tools is not None:
             self._tools.begin_wakeup()
         self._replying = True
@@ -184,6 +193,7 @@ class Conversation:
 
     def on_llm_call(self, call: LlmCall) -> None:
         self._write("llm_call", **asdict(call))
+        self._last_said = self._clock()
         if not call.ok or call.first_text_s is None:
             self._replying = False  # nothing will be said
         if not call.ok and call.error != "interrupted":
@@ -192,6 +202,7 @@ class Conversation:
 
     def on_line(self, line: SpokenLine) -> None:
         self._write("line", **asdict(line))
+        self._last_said = self._clock()
         self._replying = False
         if line.interrupted and line.text:
             self._cut_line = line.text
@@ -264,7 +275,15 @@ class VoicePipeline:
         conductor = Conductor(self.clock.snapshot)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f))
         self.activity = AgentActivity(cfg.conductor.stuck_after_s)
-        self.conversation = Conversation(log, bus, conductor, self.activity, lambda: self.clock.number, tools=tools)
+        self.conversation = Conversation(
+            log,
+            bus,
+            conductor,
+            self.activity,
+            lambda: self.clock.number,
+            tools=tools,
+            keep_s=cfg.idle.conversation_keep_s,
+        )
         rate = cfg.media.audio_sample_rate
         line = LineTracker(self.conversation.on_line)
         self.wake = WakeWordTurnStart(

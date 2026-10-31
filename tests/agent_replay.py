@@ -69,7 +69,14 @@ class Replay:
             cfg, self.clock, lambda type, **f: (self.log.session or self.log.idle).write(type, **f)
         )
         self.conversation = Conversation(
-            self.log, bus, conductor, AgentActivity(cfg.conductor.stuck_after_s), lambda: self.clock.number, self.tools
+            self.log,
+            bus,
+            conductor,
+            AgentActivity(cfg.conductor.stuck_after_s),
+            lambda: self.clock.number,
+            self.tools,
+            keep_s=cfg.idle.conversation_keep_s,
+            clock=self.time,
         )
         self.conducting = Conducting(self.clock, bus, conductor, self.conversation, busy=lambda: False)
         self.system = {"role": "system", "content": agent_prompt(cfg)}

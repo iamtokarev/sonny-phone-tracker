@@ -32,8 +32,23 @@ def records(log: SessionLog) -> list[dict]:
     return [json.loads(line) for line in log.idle.path.read_text().splitlines()]
 
 
-def conversation(log: SessionLog, bus: EventBus | None = None, session=lambda: None) -> Conversation:
-    return Conversation(log, bus or EventBus(), Conductor(lambda: {"session": None}), AgentActivity(120), session)
+class Time:
+    t = 1000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def conversation(log: SessionLog, bus: EventBus | None = None, session=lambda: None, time=None) -> Conversation:
+    return Conversation(
+        log,
+        bus or EventBus(),
+        Conductor(lambda: {"session": None}),
+        AgentActivity(120),
+        session,
+        keep_s=CFG.idle.conversation_keep_s,
+        clock=time or Time(),
+    )
 
 
 def owner_says(c: Conversation, text: str) -> None:
@@ -57,10 +72,12 @@ def test_a_failed_turn_is_logged_and_cut_from_the_context(log):
 
 
 def test_a_new_conversation_starts_with_an_empty_context(log):
-    c = conversation(log)
+    t = Time()
+    c = conversation(log, time=t)
     owner_says(c, "how are you")
     c.on_llm_call(call())
     c.on_line(SpokenLine("Bright and bored.", 1.0, 2.0, interrupted=False))
+    t.t += CFG.idle.conversation_keep_s + 1
     c.on_wake(NEW)
     assert c.context.get_messages() == []
     assert [r["type"] for r in records(log)][-2:] == ["idle_conversation_started", "wake"]
@@ -163,7 +180,7 @@ def test_the_wake_up_for_a_session_end_still_sees_the_session(log):
 
     sessions, bus = Sessions(), EventBus()
     conductor = Conductor(lambda: {"session": None})
-    c = Conversation(log, bus, conductor, AgentActivity(120), sessions)
+    c = Conversation(log, bus, conductor, AgentActivity(120), sessions, keep_s=60, clock=Time())
     clock = type("Clock", (), {"tick": lambda self: None})()
     conducting = Conducting(clock, bus, conductor, c, busy=lambda: False)  # type: ignore[arg-type]
     sessions.number = 1
@@ -177,3 +194,17 @@ def test_the_wake_up_for_a_session_end_still_sees_the_session(log):
     assert contents(c)[0] == "pause please"
     assert conducting.step() is None  # that wake-up is over: the context goes with the session
     assert contents(c) == []
+
+
+def test_a_wake_soon_after_a_silent_stop_keeps_the_conversation(log):
+    t = Time()
+    c = conversation(log, time=t)
+    owner_says(c, "tell me a story about a cat")
+    c.on_llm_call(call())
+    c.on_line(SpokenLine("Once upon a time, a cat", 1.0, 2.0, interrupted=True))
+    owner_says(c, "Hey Sonny, stop.")
+    c.on_llm_call(call(text=False))  # silence: no line reopens the window
+    t.t += CFG.idle.conversation_keep_s - 1
+    c.on_wake(NEW)  # the window has closed
+    owner_says(c, "what were you just telling me about?")
+    assert contents(c)[0] == "tell me a story about a cat"
