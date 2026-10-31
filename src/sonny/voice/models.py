@@ -56,6 +56,9 @@ class TurnGatedSTT(SegmentedSTTService):
       aggregator broadcasts turn starts and stops upstream).
     - On a wake, it keeps only the last `keep_before_s` of the segment so far: the wake phrase, without
       what was said before it in the same breath.
+    - A transcript is final only when no later speech is in progress or queued. Silero splits a turn at
+      short pauses ("Hey Sonny, how are you"); the first piece's text lands while the second is spoken,
+      and if final it ends the turn before the second piece's text arrives.
     """
 
     def __init__(self, wake: Wake, **kwargs) -> None:
@@ -77,6 +80,14 @@ class TurnGatedSTT(SegmentedSTTService):
         elif isinstance(frame, VADUserStartedSpeakingFrame):
             self._segment_in_turn = self._turn_open
         await super().process_frame(frame, direction)
+
+    async def push_frame(self, frame: Frame, direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
+        if isinstance(frame, TranscriptionFrame):
+            frame.finalized = not self._user_speaking and self._segment_queue.empty()
+            # Skip SegmentedSTTService.push_frame, which marks every transcript final.
+            await super(SegmentedSTTService, self).push_frame(frame, direction)
+            return
+        await super().push_frame(frame, direction)
 
     async def _handle_user_stopped_speaking(self, frame: VADUserStoppedSpeakingFrame) -> None:
         if not self._segment_in_turn:

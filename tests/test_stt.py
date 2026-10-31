@@ -32,16 +32,18 @@ CHATTER, WAKE_PHRASE = 1000, 2000  # sample values standing in for what was said
 
 
 class SampleValuesSTT(TurnGatedSTT):
-    """Transcribes a segment as the distinct sample values it holds."""
+    """Transcribes a segment as the distinct sample values it holds, taking `latency_s` like Parakeet."""
 
-    def __init__(self) -> None:
+    def __init__(self, latency_s: float = 0.0) -> None:
         super().__init__(CFG.wake, settings=STTSettings(model="fake", language="en"))
+        self.latency_s = latency_s
 
     @property
     def wants_wav_segments(self) -> bool:
         return False
 
     async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame | None, None]:
+        await asyncio.sleep(self.latency_s)
         values = sorted(set(np.frombuffer(audio, np.int16).tolist()) - {0})
         yield TranscriptionFrame(" ".join(map(str, values)), "owner", "")
 
@@ -51,15 +53,19 @@ def speech(value: int, seconds: float) -> list[InputAudioRawFrame]:
     return [InputAudioRawFrame(audio=chunk, sample_rate=RATE, num_channels=1) for _ in range(round(seconds * 50))]
 
 
-def transcribe(frames: Sequence[Frame]) -> list[str]:
+def transcripts(frames: Sequence[Frame], latency_s: float = 0.0) -> list[TranscriptionFrame]:
     down, _ = asyncio.run(
         run_test(
-            SampleValuesSTT(),
+            SampleValuesSTT(latency_s),
             frames_to_send=frames,
             pipeline_params=PipelineParams(audio_in_sample_rate=RATE),
         )
     )
-    return [f.text for f in down if isinstance(f, TranscriptionFrame)]
+    return [f for f in down if isinstance(f, TranscriptionFrame)]
+
+
+def transcribe(frames: Sequence[Frame]) -> list[str]:
+    return [f.text for f in transcripts(frames)]
 
 
 def test_a_wake_drops_the_speech_before_the_wake_phrase():
@@ -107,3 +113,22 @@ def test_a_follow_up_turn_is_transcribed_whole():
         VADUserStoppedSpeakingFrame(),
     ]
     assert transcribe(frames) == [f"{CHATTER} {WAKE_PHRASE}"]
+
+
+def test_a_transcript_is_final_only_when_no_later_speech_is_pending():
+    """Silero splits "Hey Sonny, how are you" at the comma. The first piece's transcript lands while the
+    second is spoken; marked final, it would end the turn before the second piece's text arrives."""
+    frames = [
+        VADUserStartedSpeakingFrame(),
+        UserStartedSpeakingFrame(),
+        *speech(WAKE_PHRASE, 0.6),
+        SleepFrame(sleep=0.1),
+        VADUserStoppedSpeakingFrame(),
+        VADUserStartedSpeakingFrame(),  # "how are you" starts before "Hey Sonny" is transcribed
+        *speech(CHATTER, 0.6),
+        SleepFrame(sleep=0.3),
+        VADUserStoppedSpeakingFrame(),
+        SleepFrame(sleep=0.3),
+    ]
+    got = transcripts(frames, latency_s=0.15)
+    assert [(f.text, f.finalized) for f in got] == [(str(WAKE_PHRASE), False), (str(CHATTER), True)]
