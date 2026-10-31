@@ -60,6 +60,9 @@ min_inside_person = 0.30
 parked_motion = 0.005  # share of frame width
 parked_window_s = 10
 
+[person]
+min_conf = 0.4  # a `person` box at least this sure is presence; ticket 07 measured person rates at 0.4
+
 [phone_use]
 start_share = 0.60
 start_window_s = 8
@@ -68,6 +71,7 @@ end_window_s = 5
 
 [window]
 min_frame_share = 0.5
+expected_fps = 30  # frames per second the vision worker delivers with daemon tracking off (ticket 15)
 
 [away]
 start_s = 60
