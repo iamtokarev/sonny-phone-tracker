@@ -100,6 +100,11 @@ class Phone:
 
 
 @dataclass(frozen=True)
+class Person:
+    min_conf: float
+
+
+@dataclass(frozen=True)
 class PhoneUse:
     start_share: float
     start_window_s: float
@@ -110,6 +115,7 @@ class PhoneUse:
 @dataclass(frozen=True)
 class Window:
     min_frame_share: float
+    expected_fps: float
 
 
 @dataclass(frozen=True)
@@ -189,6 +195,7 @@ class Config:
     voice: Voice
     vad: Vad
     phone: Phone
+    person: Person
     phone_use: PhoneUse
     window: Window
     away: Away
