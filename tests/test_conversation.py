@@ -89,19 +89,21 @@ def test_a_line_cut_off_by_a_barge_in_stays_in_the_context(log):
     owner_says(c, "tell me a story about a cat")
     c.on_llm_call(call())
     story = "Once upon a time, a cat sat on a keyboard."
-    c.on_line(SpokenLine(story, 1.0, 2.0, interrupted=True))  # the aggregator had nothing spoken to add
+    c.on_line(SpokenLine(story, 1.0, 2.0, interrupted=True))  # cut mid-sentence: the aggregator keeps nothing
     owner_says(c, "Hey Sonny, stop it.")
-    assert [m["content"] for m in c.context.get_messages() if isinstance(m, dict)] == [
-        "tell me a story about a cat",
-        story,
-        "Hey Sonny, stop it.",
-    ]
+    assert contents(c) == ["tell me a story about a cat", story, "Hey Sonny, stop it."]
 
 
-def test_a_cut_off_line_the_aggregator_kept_is_not_added_twice(log):
+def test_a_cut_off_line_the_aggregator_kept_in_part_is_not_added_again(log):
     c = IdleConversation(log, EventBus())
-    owner_says(c, "tell me a story about a cat")
-    story = "Once upon a time, a cat sat on a keyboard."
-    c.context.add_message({"role": "assistant", "content": story})
-    c.on_line(SpokenLine(story, 1.0, 2.0, interrupted=True))
-    assert len(c.context.get_messages()) == 2
+    owner_says(c, "Hey sonny, stuff.")
+    c.on_llm_call(call())
+    line = "Stuff, huh? You'll have to be more specific than that."
+    c.on_line(SpokenLine(line, 1.0, 2.0, interrupted=True))
+    c.context.add_message({"role": "assistant", "content": "Stuff, huh?"})  # what was spoken, added after
+    owner_says(c, "Hey, Sonny, stop.")
+    assert contents(c) == ["Hey sonny, stuff.", "Stuff, huh?", "Hey, Sonny, stop."]
+
+
+def contents(c: IdleConversation) -> list:
+    return [m["content"] for m in c.context.get_messages() if isinstance(m, dict)]

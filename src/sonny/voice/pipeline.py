@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from itertools import takewhile
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
@@ -92,6 +93,7 @@ class IdleConversation:
         self._log, self._bus = log, bus
         self._replying = False  # an owner turn went to the LLM and Sonny hasn't finished answering it
         self._failed_from: int | None = None  # where a failed turn starts in the context
+        self._cut_line: str | None = None  # the last line, cut off by a barge-in
 
     def _write(self, type: str, **fields) -> None:
         (self._log.session or self._log.idle).write(type, **fields)
@@ -116,6 +118,9 @@ class IdleConversation:
         self._write("bare_wake", text=text)
 
     def on_turn(self, text: str) -> None:
+        if self._cut_line is not None:
+            self._keep_cut_off_line(self._cut_line)
+            self._cut_line = None
         if self._failed_from is not None:
             messages = list(self.context.get_messages())
             self.context.set_messages(messages[: self._failed_from] + messages[-1:])  # keep only the new turn
@@ -135,15 +140,26 @@ class IdleConversation:
         self._write("line", **asdict(line))
         self._replying = False
         if line.interrupted and line.text:
-            self._keep_cut_off_line(line.text)
+            self._cut_line = line.text
 
     def _keep_cut_off_line(self, text: str) -> None:
-        """A barge-in can leave the aggregator nothing spoken to add (Pocket TTS sends no word timing).
-        Keep the line, so the agent knows the owner's next words cut it off ("stop" means stop talking)."""
-        messages = self.context.get_messages()
-        last = messages[-1] if messages else None
-        if not (isinstance(last, dict) and last.get("role") == "assistant"):
-            self.context.add_message({"role": "assistant", "content": text})
+        """Make sure the agent sees the line the owner's new turn cut off, so it knows "stop" means stop
+        talking. The assistant aggregator keeps only whole sentences already spoken (Pocket TTS sends
+        text per sentence), and adds them after the line stops; so this runs at the next owner turn.
+        """
+        messages = list(self.context.get_messages())
+        new_turn = len(messages) - 1  # the owner turn being reported is the last message
+        replies = takewhile(lambda m: owner_text(m) is None, reversed(messages[:new_turn]))
+        if any(text.startswith(spoken) for m in replies if (spoken := _assistant_text(m))):
+            return  # the aggregator kept what was spoken
+        messages.insert(new_turn, {"role": "assistant", "content": text})
+        self.context.set_messages(messages)
+
+
+def _assistant_text(message: object) -> str | None:
+    if isinstance(message, dict) and message.get("role") == "assistant" and isinstance(message.get("content"), str):
+        return message["content"]
+    return None
 
 
 class VoicePipeline:
