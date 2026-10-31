@@ -112,3 +112,7 @@ min_delay_s = 20
 [hooks]
 max_active = 5
 min_refire_s = 60
+
+[conductor]
+tick_s = 0.25  # how often the session clock is read and queued events are offered to the agent
+stuck_after_s = 20  # a wake-up showing no activity this long stops holding events (Sonny speaking always holds them)
