@@ -63,3 +63,16 @@ def test_log_dir_is_created(tmp_path):
     log = SessionLog(tmp_path / "nested" / "logs")
     log.idle.write("wake", score=1.0)
     assert (tmp_path / "nested" / "logs" / "idle.jsonl").exists()
+
+
+def test_a_session_ended_with_its_file_kept_open_logs_one_end(tmp_path):
+    log = SessionLog(tmp_path)
+    writer = log.start_session()
+    log.end_session(EndReason.COMPLETED, keep_open=True)  # time's up: an extend may still follow
+    writer.write("tool_call", name="extend")
+    log.end_session(EndReason.APP_QUIT)
+    assert [(r["type"], r.get("reason")) for r in records(writer.path)] == [
+        ("session.ended", "completed"),
+        ("tool_call", None),
+    ]
+    assert log.session is None

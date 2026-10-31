@@ -38,6 +38,7 @@ from pipecat.turns.types import ProcessFrameResult
 from pipecat.turns.user_start import BaseUserTurnStartStrategy
 
 from sonny.config import Wake
+from sonny.focus.conductor import is_wakeup
 
 SONNY_NAME = re.compile(r"sonny", re.I)
 # A turn that is only the wake phrase, maybe with filler: the owner paused after "Hey Sonny".
@@ -176,7 +177,13 @@ class OwnerTurns(FrameProcessor):
 
 
 def owner_text(message: object) -> str | None:
-    """The text of an owner message in an LLM context, or None for any other message."""
-    if isinstance(message, dict) and message.get("role") == "user" and isinstance(message.get("content"), str):
+    """The transcript in an owner message the user aggregator added, or None for any other message (a
+    wake-up the conductor made included)."""
+    if (
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+        and not is_wakeup(message)
+    ):
         return message["content"]
     return None

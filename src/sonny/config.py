@@ -183,6 +183,17 @@ class Hooks:
 
 
 @dataclass(frozen=True)
+class Conductor:
+    tick_s: float
+    stuck_after_s: float
+
+
+@dataclass(frozen=True)
+class Idle:
+    conversation_keep_s: float
+
+
+@dataclass(frozen=True)
 class Config:
     robot: Robot
     startup: Startup
@@ -208,6 +219,8 @@ class Config:
     nudge: Nudge
     followup: Followup
     hooks: Hooks
+    conductor: Conductor
+    idle: Idle
 
 
 def load_config(path: Path | str | None = None) -> Config:

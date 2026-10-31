@@ -2,7 +2,8 @@
 
 1. The OpenAI SDK retries errors itself (`max_retries`, with backoff).
 2. Pipecat re-issues a request that gives no output within `retry_timeout_s` (`retry_on_timeout`).
-3. The app abandons any call still running at `wakeup_cap_s`.
+3. The app abandons a wake-up still running at `wakeup_cap_s`. A wake-up with a tool call makes two calls
+   (the call after the tool results continues it), so the cap spans both.
 
 A call that still fails is reported through `on_call` and produces no text, so Sonny says nothing;
 it never surfaces as a pipeline error. The app never switches model.
@@ -37,6 +38,7 @@ class CappedOpenRouterLLM(OpenRouterLLMService):
         self._cfg = cfg  # read by create_client(), which the base __init__ calls
         self._on_call = on_call
         self._call_start: float | None = None
+        self._wakeup_start = 0.0
         self._first_text_s: float | None = None
         self._attempts = 0
         super().__init__(
@@ -67,11 +69,14 @@ class CappedOpenRouterLLM(OpenRouterLLMService):
 
     async def _process_context(self, context: LLMContext) -> None:
         self._call_start, self._first_text_s, self._attempts = time.monotonic(), None, 0
+        if not _after_tool_results(context):
+            self._wakeup_start = self._call_start
+        cap_s = self._cfg.wakeup_cap_s - (self._call_start - self._wakeup_start)
         error: str | None = None
         try:
-            await asyncio.wait_for(super()._process_context(context), self._cfg.wakeup_cap_s)
+            await asyncio.wait_for(super()._process_context(context), max(cap_s, 0))
         except TimeoutError as e:
-            hit_cap = time.monotonic() - self._call_start >= self._cfg.wakeup_cap_s
+            hit_cap = time.monotonic() - self._call_start >= cap_s
             error = "cap" if hit_cap else f"{type(e).__name__}: {e}"
         except asyncio.CancelledError:
             error = "interrupted"
@@ -90,3 +95,15 @@ class CappedOpenRouterLLM(OpenRouterLLMService):
                 )
             )
             self._call_start = None
+
+
+def _after_tool_results(context: LLMContext) -> bool:
+    """The call continues a wake-up: tool results came after its last user message (an owner turn or an
+    event). A line said with the tool calls may come after them, once it has been spoken."""
+    for message in reversed(context.get_messages()):
+        role = message.get("role") if isinstance(message, dict) else None
+        if role == "tool":
+            return True
+        if role == "user":
+            return False
+    return False

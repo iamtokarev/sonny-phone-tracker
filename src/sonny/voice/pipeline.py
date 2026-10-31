@@ -1,7 +1,8 @@
-"""The voice pipeline in idle (spec §8): Reachy mic → STT → Wake Word turns → LLM → Pocket TTS → Reachy speaker.
+"""The voice pipeline (spec §8): Reachy mic → STT → Wake Word turns → LLM → Pocket TTS → Reachy speaker,
+with the conductor feeding session events to the same LLM (spec §7).
 
-An idle conversation is a short-lived context: a wake with no window open starts a fresh one. Every
-wake, turn, LLM call and spoken line goes to the log (spec §10).
+An idle conversation is a short-lived context: a wake with no window open starts a fresh one. A Focus
+Session keeps one context. Every wake, wake-up, LLM call, tool call and spoken line goes to the log (spec §10).
 """
 
 import asyncio
@@ -18,11 +19,12 @@ from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
     LLMFullResponseStartFrame,
+    LLMMessagesAppendFrame,
     LLMTextFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext, LLMStandardMessage
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.turns.user_start import VADUserTurnStartStrategy
@@ -32,13 +34,17 @@ from pipecat.workers.runner import WorkerRunner
 
 from sonny.config import Config
 from sonny.events import Event, EventBus, EventType
+from sonny.focus.clock import FocusClock
+from sonny.focus.conductor import Conductor, wakeup_payload
+from sonny.focus.tools import SessionTools
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
+from sonny.voice.activity import ActivityTap, AgentActivity
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
 from sonny.voice.models import ParakeetSTT, load_wake_scorer, pocket_tts
-from sonny.voice.prompt import IDLE_PROMPT
+from sonny.voice.prompt import agent_prompt
 from sonny.voice.transport import ReachyTransport
-from sonny.voice.turns import OwnerTurns, WakeSeen, WakeWordTurnStart, owner_text
+from sonny.voice.turns import OwnerTurns, WakeSeen, WakeWordTurnStart
 
 
 @dataclass(frozen=True)
@@ -80,19 +86,39 @@ class LineTracker(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
-class IdleConversation:
-    """The idle context and the log records of the voice loop.
+class Conversation:
+    """The agent's context and the log records of the voice loop.
 
-    The context is dropped when a conversation ends: the next wake that finds no window open and no
-    reply on its way starts a fresh one. A failed turn is cut from the context at the next owner turn,
-    after the assistant aggregator has added whatever partial reply it got (spec §7).
+    Owner turns and conductor events reach the context as JSON wake-ups (`Conductor`). The context of an
+    idle conversation is dropped when it ends: a wake that finds no window open, no reply on its way, and
+    nothing said for `keep_s` starts a fresh one. (The window decides what Sonny listens to; `keep_s` how
+    long it remembers, so a wake just after a silent "stop" still continues the conversation.) A Focus
+    Session keeps one context from the conversation that started it until the session closes. A failed
+    wake-up is cut from the context at the next owner turn, after the assistant aggregator has added
+    whatever partial reply it got (spec §7).
     """
 
-    def __init__(self, log: SessionLog, bus: EventBus) -> None:
-        self.context = LLMContext()
-        self._log, self._bus = log, bus
-        self._replying = False  # an owner turn went to the LLM and Sonny hasn't finished answering it
-        self._failed_from: int | None = None  # where a failed turn starts in the context
+    def __init__(
+        self,
+        log: SessionLog,
+        bus: EventBus,
+        conductor: Conductor,
+        activity: AgentActivity,
+        session: Callable[[], int | None],
+        tools: SessionTools | None = None,
+        *,
+        keep_s: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.context = LLMContext(tools=tools.tools) if tools is not None else LLMContext()
+        self._tools = tools
+        self._log, self._bus, self._conductor, self._activity = log, bus, conductor, activity
+        self._session = session  # the open Focus Session's number, or None
+        self._context_session: int | None = None  # the session this context belongs to
+        self._keep_s, self._clock = keep_s, clock
+        self._last_said = -float("inf")  # clock time of the last turn, wake-up, LLM call or line
+        self._replying = False  # a wake-up went to the LLM and Sonny hasn't finished answering it
+        self._failed_from: int | None = None  # where a failed wake-up starts in the context
         self._cut_line: str | None = None  # the last line, cut off by a barge-in
 
     def _write(self, type: str, **fields) -> None:
@@ -106,7 +132,8 @@ class IdleConversation:
         if seen.ignored:
             self._write(EventType.WAKE, score=seen.score, ignored="self_wake")
             return
-        if seen.new_conversation and not self._replying:
+        ended = self._clock() - self._last_said > self._keep_s
+        if seen.new_conversation and ended and not self._replying and self._context_session is None:
             self.context.set_messages([])
             self._failed_from = None
             self._write("idle_conversation_started")
@@ -118,6 +145,7 @@ class IdleConversation:
         self._write("bare_wake", text=text)
 
     def on_turn(self, text: str) -> None:
+        """An owner turn is the last message: it becomes an `owner.spoke` wake-up."""
         if self._cut_line is not None:
             self._keep_cut_off_line(self._cut_line)
             self._cut_line = None
@@ -125,19 +153,56 @@ class IdleConversation:
             messages = list(self.context.get_messages())
             self.context.set_messages(messages[: self._failed_from] + messages[-1:])  # keep only the new turn
             self._failed_from = None
-        self._replying = True
         self._emit(Event(EventType.OWNER_SPOKE, {"text": text}))
+        message = self._conductor.owner_wakeup(text)
+        self.context.set_messages([*list(self.context.get_messages())[:-1], message])
+        self._begin(message)
+
+    def deliver(self, message: LLMStandardMessage) -> None:
+        """A conductor wake-up is about to be appended to the context."""
+        if (wakeup_payload(message) or {}).get("event") == EventType.SESSION_STARTED:
+            self._start_session_context()
+        self._begin(message)
+
+    def _begin(self, message: LLMStandardMessage) -> None:
+        self._write("wakeup", payload=wakeup_payload(message))
+        self._last_said = self._clock()
+        if self._tools is not None:
+            self._tools.begin_wakeup()
+        self._replying = True
+        self._activity.begin()
+
+    def _start_session_context(self) -> None:
+        """A session's context holds the conversation that started it. After a Task switch, that is only the
+        turn that asked for it: the old session's history goes with the old session."""
+        session = self._session()
+        if self._context_session is not None and self._context_session != session:
+            messages = list(self.context.get_messages())
+            owner = [i for i, m in enumerate(messages) if _is_owner_turn(m)]
+            self.context.set_messages(messages[owner[-1] :] if owner else [])
+            self._failed_from = None
+        self._context_session = session
+
+    def on_idle(self) -> None:
+        """No wake-up is running. A context whose session has closed is dropped. (After a Task switch a new
+        session is open; its `session.started` trims the context instead.)"""
+        if self._context_session is not None and self._session() is None:
+            self.context.set_messages([])
+            self._context_session = None
+            self._failed_from = self._cut_line = None
 
     def on_llm_call(self, call: LlmCall) -> None:
         self._write("llm_call", **asdict(call))
+        self._last_said = self._clock()
         if not call.ok or call.first_text_s is None:
             self._replying = False  # nothing will be said
         if not call.ok and call.error != "interrupted":
-            owner = [i for i, m in enumerate(self.context.get_messages()) if owner_text(m) is not None]
-            self._failed_from = owner[-1] if owner else None
+            turns = [i for i, m in enumerate(self.context.get_messages()) if _is_turn(m)]
+            self._failed_from = turns[-1] if turns else None
 
     def on_line(self, line: SpokenLine) -> None:
         self._write("line", **asdict(line))
+        self._last_said = self._clock()
         self._replying = False
         if line.interrupted and line.text:
             self._cut_line = line.text
@@ -149,11 +214,20 @@ class IdleConversation:
         """
         messages = list(self.context.get_messages())
         new_turn = len(messages) - 1  # the owner turn being reported is the last message
-        replies = takewhile(lambda m: owner_text(m) is None, reversed(messages[:new_turn]))
+        replies = takewhile(lambda m: not _is_turn(m), reversed(messages[:new_turn]))
         if any(text.startswith(spoken) for m in replies if (spoken := _assistant_text(m))):
             return  # the aggregator kept what was spoken
         messages.insert(new_turn, {"role": "assistant", "content": text})
         self.context.set_messages(messages)
+
+
+def _is_turn(message: object) -> bool:
+    """A message that starts a wake-up: an owner turn or a conductor event."""
+    return isinstance(message, dict) and message.get("role") == "user"
+
+
+def _is_owner_turn(message: object) -> bool:
+    return (wakeup_payload(message) or {}).get("event") == EventType.OWNER_SPOKE
 
 
 def _assistant_text(message: object) -> str | None:
@@ -162,12 +236,54 @@ def _assistant_text(message: object) -> str | None:
     return None
 
 
+class Conducting:
+    """One conductor tick: read the clock, queue what it published, and hand over the next wake-up once
+    the agent is free."""
+
+    def __init__(
+        self,
+        clock: FocusClock,
+        bus: EventBus,
+        conductor: Conductor,
+        conversation: Conversation,
+        busy: Callable[[], bool],
+    ) -> None:
+        self._clock, self._conductor, self._conversation, self._busy = clock, conductor, conversation, busy
+        self._events = bus.subscribe()
+
+    def step(self) -> LLMStandardMessage | None:
+        """The wake-up message to append to the context now, if any."""
+        self._clock.tick()
+        while not self._events.empty():
+            self._conductor.offer(self._events.get_nowait())
+        if self._busy():
+            return None
+        message = self._conductor.next_wakeup()
+        if message is None:
+            self._conversation.on_idle()  # only now: a session's last wake-up still needs its context
+        else:
+            self._conversation.deliver(message)
+        return message
+
+
 class VoicePipeline:
-    """Loads the models and builds the pipeline; `run()` holds the idle conversation until stopped."""
+    """Loads the models and builds the pipeline; `run()` holds conversations and Focus Sessions until stopped."""
 
     def __init__(self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, api_key: str) -> None:
         self.cfg = cfg
-        self.conversation = IdleConversation(log, bus)
+        self.clock = FocusClock(cfg, log, bus)
+        conductor = Conductor(self.clock.snapshot)
+        tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f))
+        self.activity = AgentActivity(cfg.conductor.stuck_after_s)
+        self.conversation = Conversation(
+            log,
+            bus,
+            conductor,
+            self.activity,
+            lambda: self.clock.number,
+            tools=tools,
+            keep_s=cfg.idle.conversation_keep_s,
+        )
         rate = cfg.media.audio_sample_rate
         line = LineTracker(self.conversation.on_line)
         self.wake = WakeWordTurnStart(
@@ -190,7 +306,16 @@ class VoicePipeline:
             ),
         )
         llm = CappedOpenRouterLLM(
-            cfg.llm, api_key=api_key, system_instruction=IDLE_PROMPT, on_call=self.conversation.on_llm_call
+            cfg.llm, api_key=api_key, system_instruction=agent_prompt(cfg), on_call=self.conversation.on_llm_call
+        )
+        for name in tools.names:
+            llm.register_function(name, tools.handle)
+        self.conducting = Conducting(
+            self.clock,
+            bus,
+            conductor,
+            self.conversation,
+            busy=lambda: self.activity.busy or self.wake.in_turn or self.wake.bot_speaking,
         )
         transport = ReachyTransport(hub, cfg.voice, cfg.tts)
         pipeline = Pipeline(
@@ -202,6 +327,7 @@ class VoicePipeline:
                     on_bare_wake=bare_wake, on_turn=self.conversation.on_turn, woken_turn=lambda: self.wake.woken_turn
                 ),
                 llm,
+                ActivityTap(self.activity),
                 line,
                 pocket_tts(cfg.tts),
                 transport.output(),
@@ -226,9 +352,16 @@ class VoicePipeline:
                 await asyncio.sleep(self.cfg.voice.stop_poll_s)
             await runner.cancel(reason="quit")
 
+        async def conduct() -> None:
+            while True:
+                if (message := self.conducting.step()) is not None:
+                    await self.worker.queue_frame(LLMMessagesAppendFrame([message], run_llm=True))
+                await asyncio.sleep(self.cfg.conductor.tick_s)
+
         await runner.add_workers(self.worker)
-        watcher = asyncio.create_task(watch())
+        tasks = [asyncio.create_task(watch()), asyncio.create_task(conduct())]
         try:
             await runner.run()
         finally:
-            watcher.cancel()
+            for task in tasks:
+                task.cancel()
