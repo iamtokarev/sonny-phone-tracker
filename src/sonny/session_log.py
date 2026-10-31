@@ -42,6 +42,7 @@ class SessionLog:
         self.dir = Path(log_dir)
         self.session: LogWriter | None = None
         self._idle: LogWriter | None = None
+        self._session_ended = False  # `session.ended` is written; the file stays open for an extend
 
     @property
     def idle(self) -> LogWriter:
@@ -54,15 +55,24 @@ class SessionLog:
             raise RuntimeError("a session log is already open")
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         self.session = LogWriter(self.dir / f"session-{stamp}.jsonl")
+        self._session_ended = False
         return self.session
 
-    def end_session(self, reason: EndReason) -> None:
-        """Log `session.ended` with `reason` and close the file; a no-op with no session open."""
+    def end_session(self, reason: EndReason, keep_open: bool = False) -> None:
+        """Log `session.ended` with `reason`, unless it is already logged, and close the file; a no-op with
+        no session open. `keep_open` leaves the file open for what follows a time's-up (an extend)."""
         if self.session is None:
             return
-        self.session.write(EventType.SESSION_ENDED, reason=reason)
-        self.session.close()
-        self.session = None
+        if not self._session_ended:
+            self.session.write(EventType.SESSION_ENDED, reason=reason)
+            self._session_ended = True
+        if not keep_open:
+            self.session.close()
+            self.session = None
+
+    def reopen_session(self) -> None:
+        """An extend after time's up continues the session in the same file; its next end is logged."""
+        self._session_ended = False
 
     def close(self) -> None:
         if self._idle is not None:
