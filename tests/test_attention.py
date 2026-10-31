@@ -13,7 +13,6 @@ FPS = CFG.window.expected_fps
 W = 1280
 
 PERSON = Box(0.9, 400, 100, 900, 720)
-NOBODY = None
 
 
 def held_phone(t: float) -> Box:
@@ -48,10 +47,10 @@ def gone(t: float) -> Detections:
 class Run:
     """Feeds scenes frame by frame at the expected rate and keeps every event with its session time."""
 
-    def __init__(self, cfg=CFG) -> None:
+    def __init__(self) -> None:
         self.clock = Clock()
         self.start = self.clock.t
-        self.rules = AttentionRules(cfg, self.clock)
+        self.rules = AttentionRules(CFG, self.clock)
         self.events: list[tuple[float, Event]] = []
 
     @property
@@ -102,7 +101,7 @@ def test_phone_use_starts_once_evidence_fills_sixty_percent_of_the_window():
     run = Run().play(focused, 10).play(on_phone, 10)
     assert run.first(EventType.PHONE_USE_STARTED) == pytest.approx(
         10 + 0.6 * 8, abs=0.15
-    )  # a picked-up phone counts once it has moved
+    )  # a phone taken in hand counts once it has moved
 
 
 def test_two_short_bursts_in_one_window_do_not_start_phone_use():
@@ -136,7 +135,7 @@ def test_phone_evidence(label, scene, starts):
     assert (EventType.PHONE_USE_STARTED in run.types()) is starts, label
 
 
-def test_phone_picked_up_after_lying_still_counts_once_it_moves():
+def test_a_phone_that_lay_still_counts_once_it_moves():
     lying = phone_scene(moving=False)
     run = Run().play(lying, 20).play(on_phone, 10)
     assert run.first(EventType.PHONE_USE_STARTED) == pytest.approx(20 + 0.6 * 8, abs=0.5)
@@ -163,8 +162,10 @@ def test_phone_use_end_needs_under_twenty_percent(on_s, ends):
 def test_phone_use_holds_while_nobody_is_present_and_ends_when_they_return():
     run = Run().play(on_phone, 15).play(gone, 30)
     assert run.types() == [EventType.PHONE_USE_STARTED]
-    run.play(focused, 1)
+    run.play(focused, 5)
     assert run.types() == [EventType.PHONE_USE_STARTED, EventType.FOCUSED_RESUMED]
+    # judged on the frames with someone in them: half a window of them
+    assert run.first(EventType.FOCUSED_RESUMED) == pytest.approx(45 + 0.5 * 5, abs=2 / FPS)
 
 
 def test_each_distraction_episode_gets_the_next_number():
@@ -212,8 +213,8 @@ def test_phone_use_does_not_end_on_frames_taken_during_a_head_move():
     assert run.types() == [EventType.PHONE_USE_STARTED]
 
 
-def stray(scene: Scene, every_s: float = 2) -> Scene:
-    """`scene` with nobody in frame except one stray `person` frame every `every_s`."""
+def stray(every_s: float = 2) -> Scene:
+    """Nobody in frame except one stray `person` frame every `every_s`."""
     return lambda t: focused(t) if round(t * FPS) % round(every_s * FPS) == 0 else gone(t)
 
 
@@ -245,7 +246,7 @@ def test_away_timer_runs_through_a_search_sweep():
     [
         ("3 s of presence", [(focused, 3.1)], True),
         ("2.9 s of presence", [(focused, 2.9), (gone, 5)], False),
-        ("stray person frames", [(stray(gone), 20)], False),
+        ("stray person frames", [(stray(), 20)], False),
         ("presence broken by one empty frame", [(focused, 2), (gone, 1 / FPS), (focused, 2), (gone, 5)], False),
     ],
 )
@@ -404,3 +405,23 @@ def test_reset_drops_phone_evidence_seen_before_it():
     run.rules.reset()
     run.play(on_phone, 2).play(focused, 10)  # 5 s of phone in 8 s without the reset
     assert run.types() == []
+
+
+def test_coming_back_still_on_the_phone_keeps_phone_use():
+    run = Run().play(on_phone, 15).play(gone, 30).play(on_phone, 10)
+    assert run.types() == [EventType.PHONE_USE_STARTED]
+
+
+def test_away_starts_on_time_during_a_search_sweep():
+    run = Run().play(focused, 10).play(gone, 55).play(head_moving(gone), 10)
+    assert run.first(EventType.AWAY_STARTED) == pytest.approx(10 + 60, abs=2 / FPS)
+
+
+@pytest.mark.parametrize("flag", ["paused", "blind"])
+def test_excuse_expiry_while_paused_or_blind_wakes_no_one(flag):
+    run = Run().play(focused, 10)
+    run.rules.start_excuse()
+    run.play(on_phone, 15)
+    getattr(run.rules, f"set_{flag}")(True)
+    (event,) = run.rules.end_excuse()
+    assert (event.type, event.data["wakes"]) == (EventType.PHONE_USE_STARTED, False)

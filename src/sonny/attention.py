@@ -30,6 +30,17 @@ class Box:
     x1: float
     y1: float
 
+    @property
+    def centre(self) -> tuple[float, float]:
+        return (self.x0 + self.x1) / 2, (self.y0 + self.y1) / 2
+
+    def share_inside(self, other: "Box") -> float:
+        """The share of this box's area that lies inside `other`."""
+        w = max(0.0, min(self.x1, other.x1) - max(self.x0, other.x0))
+        h = max(0.0, min(self.y1, other.y1) - max(self.y0, other.y0))
+        area = (self.x1 - self.x0) * (self.y1 - self.y0)
+        return w * h / area if area > 0 else 0.0
+
 
 @dataclass(frozen=True)
 class Detections:
@@ -56,6 +67,8 @@ class Episode:
 
 @dataclass(frozen=True)
 class _Counted:
+    """A frame that counts toward the windows: not taken during a head move."""
+
     t: float
     evidence: bool
     present: bool
@@ -69,9 +82,10 @@ class AttentionRules:
     """
 
     def __init__(self, cfg: Config, clock: Callable[[], float] = time.time) -> None:
+        # Wall time, like `Event.t`: the vision worker and the session clock share it.
         self.cfg, self._clock = cfg, clock
-        a, pu = cfg.away, cfg.phone_use
-        self._longest_window_s = max(a.start_s, a.end_presence_s, pu.start_window_s, pu.end_window_s)
+        away, pu = cfg.away, cfg.phone_use
+        self._longest_window_s = max(away.start_s, away.end_presence_s, pu.start_window_s, pu.end_window_s)
         self.episodes: list[Episode] = []
         self.episode: Episode | None = None  # the open one
         self._excused = self._paused = self._blind = False
@@ -83,8 +97,7 @@ class AttentionRules:
         """Start over from Focused with empty windows, closing any open episode (after Mac sleep).
 
         Away then counts from now, as at session start."""
-        if self.episode is not None:
-            self.episode.closed_at, self.episode = self._clock(), None
+        self._close_episode()
         self.state = AttentionState.FOCUSED
         self._frames: deque[_Counted] = deque()
         self._phone_track: deque[tuple[float, float, float]] = deque()  # (t, centre x, centre y) of sure phones
@@ -103,14 +116,17 @@ class AttentionRules:
 
     def observe(self, d: Detections) -> list[Event]:
         """Take one frame from the vision worker; return the attention events it causes."""
-        if self._frozen_at is not None or d.head_moving:
+        if self._frozen_at is not None:
             return []
         now = self._now()
+        if d.head_moving:  # left out of every window, but the Away timer runs through a sweep
+            return [self._start(AttentionState.AWAY)] if self._away_due(now) else []
         present = self._present(d)
         self._count(_Counted(now, self._evidence(now, d), present))
         if present:
             self._last_present = now
-            self._present_since = self._present_since or now
+            if self._present_since is None:
+                self._present_since = now
         else:
             self._present_since = None
 
@@ -123,17 +139,22 @@ class AttentionRules:
             if _evidence_share(back) >= pu.start_share:  # back on the phone: same episode
                 return [self._start(AttentionState.PHONE_USE)]
             return [self._resume()]
-        if now - self._last_present >= away.start_s and self._window(now, away.start_s) is not None:
+        if self._away_due(now):
             return [self._start(AttentionState.AWAY)]
         if self.state == AttentionState.FOCUSED:
             share = self._share(now, pu.start_window_s)
             if share is not None and share >= pu.start_share:
                 return [self._start(AttentionState.PHONE_USE)]
-        elif present:  # Phone Use ends only with someone in frame
-            share = self._share(now, pu.end_window_s)
-            if share is not None and share < pu.end_share:
+        elif present:  # Phone Use ends only with someone in frame, judged on frames with someone in them
+            back = self._window(now, pu.end_window_s, present_only=True)
+            if back is not None and _evidence_share(back) < pu.end_share:
                 return [self._resume()]
         return []
+
+    def _away_due(self, now: float) -> bool:
+        if self.state == AttentionState.AWAY or now - self._last_present < self.cfg.away.start_s:
+            return False
+        return self._window(now, self.cfg.away.start_s) is not None
 
     def start_excuse(self) -> None:
         """From now on, attention events are kept but marked as waking no one."""
@@ -144,7 +165,7 @@ class AttentionRules:
         self._excused = False
         if self.episode is None:
             return []
-        self.episode.closed_at, self.episode = self._clock(), None
+        self._close_episode()
         return [self._start(self.state)]
 
     def record_nudge(self, intensity: str) -> None:
@@ -184,12 +205,18 @@ class AttentionRules:
     def _resume(self) -> Event:
         assert self.episode is not None
         event = self._event(EventType.FOCUSED_RESUMED, wakes=bool(self.episode.nudges) or self.episode.included_away)
-        self.episode.closed_at, self.episode, self.state = event.t, None, AttentionState.FOCUSED
+        self._close_episode()
+        self.state = AttentionState.FOCUSED
         return event
+
+    def _close_episode(self) -> None:
+        if self.episode is not None:
+            self.episode.closed_at, self.episode = self._clock(), None
 
     def _event(self, kind: EventType, wakes: bool) -> Event:
         assert self.episode is not None
-        data = {"episode": self.episode.number, "wakes": wakes and not self._excused, "excused": self._excused}
+        quiet = self._excused or self._frozen_at is not None  # an Excuse, Pause or Blind wakes no one
+        data = {"episode": self.episode.number, "wakes": wakes and not quiet, "excused": self._excused}
         return Event(kind, data, self._clock())
 
     def _present(self, d: Detections) -> bool:
@@ -203,23 +230,23 @@ class AttentionRules:
         return (
             person is not None
             and self._present(d)
-            and _inside(phone, person) >= self.cfg.phone.min_inside_person
+            and phone.share_inside(person) >= self.cfg.phone.min_inside_person
             and moving
         )
 
     def _track(self, now: float, phone: Box, frame_width: int) -> bool:
         """Track a sure phone's centre; False while it is parked (it moved too little over the parked window)."""
         track = self._phone_track
-        track.append((now, (phone.x0 + phone.x1) / 2, (phone.y0 + phone.y1) / 2))
+        track.append((now, *phone.centre))
         while track[0][0] < now - self.cfg.phone.parked_window_s:
             track.popleft()
         xs, ys = [x for _, x, _ in track], [y for _, _, y in track]
         spread = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
         return spread >= self.cfg.phone.parked_motion * frame_width
 
-    def _window(self, now: float, window_s: float) -> list[_Counted] | None:
+    def _window(self, now: float, window_s: float, present_only: bool = False) -> list[_Counted] | None:
         """The counted frames of the last `window_s`, or None when there are too few to judge by."""
-        recent = [f for f in self._frames if f.t > now - window_s]
+        recent = [f for f in self._frames if f.t > now - window_s and (f.present or not present_only)]
         enough = self.cfg.window.min_frame_share * window_s * self.cfg.window.expected_fps
         return recent if len(recent) >= enough else None
 
@@ -231,11 +258,3 @@ class AttentionRules:
 
 def _evidence_share(frames: list[_Counted]) -> float:
     return sum(f.evidence for f in frames) / len(frames)
-
-
-def _inside(phone: Box, person: Box) -> float:
-    """The share of the phone box that lies inside the person box."""
-    w = max(0.0, min(phone.x1, person.x1) - max(phone.x0, person.x0))
-    h = max(0.0, min(phone.y1, person.y1) - max(phone.y0, person.y0))
-    area = (phone.x1 - phone.x0) * (phone.y1 - phone.y0)
-    return w * h / area if area > 0 else 0.0
