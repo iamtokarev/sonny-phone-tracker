@@ -18,8 +18,10 @@ git-ignored). The first start downloads the voice models from Hugging Face.
 
 Start it from a terminal with macOS Local Network permission: uv's Pythons are blocked when
 started from elsewhere (`[Errno 65] No route to host`). It prints `ready` once Sonny's speaker
-link is up and the voice loop is listening. Say "Hey Sonny" to chat; Ctrl-C puts Sonny in its
-sleep pose.
+link is up and the voice loop is listening. Say "Hey Sonny" to chat, or to start a Focus
+Session ("Hey Sonny, let's work on my slides for 25 minutes"); in a session you can ask for the
+time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctrl-C puts Sonny in
+its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
 Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
 the whole file and point `SONNY_CONFIG` at the copy.
@@ -30,6 +32,14 @@ the whole file and point `SONNY_CONFIG` at the copy.
 uv sync
 uv run pre-commit install
 uv run pytest
+```
+
+The agent scenarios (`tests/test_agent_scenarios.py`) replay owner lines and session time through
+the real tools and conductor with a scripted agent. To run them against the configured model
+instead (costs OpenRouter credit), after any change to the prompt or model:
+
+```bash
+SONNY_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
 ```
 
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
