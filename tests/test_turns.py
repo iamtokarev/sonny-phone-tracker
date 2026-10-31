@@ -299,3 +299,16 @@ def test_a_follow_up_turn_in_the_window_is_kept_whole():
     context = LLMContext([{"role": "user", "content": "My son says hi, by the way."}])
     turns.finish(context)
     assert turns.said == ["My son says hi, by the way."]
+
+
+def test_a_bare_wake_barge_in_never_answers_the_earlier_turn_again():
+    turns = Turns(woken=True)
+    context = LLMContext(
+        [
+            {"role": "user", "content": "Tell me a long story about a cat."},
+            {"role": "user", "content": "Hey Sonny."},  # the barge-in; "stop" comes as the next turn
+        ]
+    )
+    assert turns.finish(context) == []
+    assert turns.said == [] and turns.bare == ["Hey Sonny."]
+    assert context.get_messages() == [{"role": "user", "content": "Tell me a long story about a cat."}]

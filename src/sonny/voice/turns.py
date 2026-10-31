@@ -146,9 +146,9 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
 
 
 class OwnerTurns(FrameProcessor):
-    """Sits right after the user aggregator. Cuts a woken turn at the wake phrase, drops bare-wake turns
-    from the context and reports each finished owner turn; a context left with no owner turn to answer
-    goes no further."""
+    """Sits right after the user aggregator, which ends each finished turn's context with the owner's
+    new message. Cuts a woken turn at the wake phrase and drops bare-wake messages from the context. A turn
+    that is only the wake phrase goes no further: it never re-answers an earlier message."""
 
     def __init__(
         self, on_bare_wake: Callable[[str], None], on_turn: Callable[[str], None], woken_turn: Callable[[], bool]
@@ -158,20 +158,18 @@ class OwnerTurns(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
-        if isinstance(frame, LLMContextFrame):
-            messages = list(frame.context.get_messages())  # set_messages() reuses the list
-            said = owner_text(messages[-1]) if messages else None
-            if said is not None and self._woken_turn():
-                messages[-1] = {"role": "user", "content": from_wake_phrase(said)}
-                frame.context.set_messages(list(messages))
+        messages = list(frame.context.get_messages()) if isinstance(frame, LLMContextFrame) else []
+        said = owner_text(messages[-1]) if messages else None
+        if isinstance(frame, LLMContextFrame) and said is not None:
+            if self._woken_turn():
+                said = from_wake_phrase(said)
+                messages[-1] = {"role": "user", "content": said}
             kept = [m for m in messages if not is_bare_wake(owner_text(m) or "")]
-            if len(kept) < len(messages):
-                frame.context.set_messages(kept)
-                for m in messages:
-                    if m not in kept:
-                        self._on_bare_wake(owner_text(m) or "")
-            said = owner_text(kept[-1]) if kept else None
-            if said is None:
+            for m in messages:
+                if m not in kept:
+                    self._on_bare_wake(owner_text(m) or "")
+            frame.context.set_messages(kept)
+            if is_bare_wake(said):
                 return
             self._on_turn(said)
         await self.push_frame(frame, direction)
