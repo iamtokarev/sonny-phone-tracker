@@ -77,3 +77,91 @@ class FakeMini:
         if name in {"enable_motors", "wake_up", "stop_head_tracking", "goto_sleep"}:
             return lambda *a, **k: self.calls.append(name)
         raise AttributeError(name)
+
+
+class FakeRobot:
+    """Stands in for Sonny's head at the head owner's seam: the SDK calls and the daemon REST routes.
+
+    A recorded emotion runs until `finish()`; `fail_play` makes the REST play raise; `motors` is what the
+    daemon reports."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+        self.running: set[str] = set()
+        self.motors = True
+        self.fail_play: Exception | None = None
+        self.vol = 62
+        self.played = threading.Event()  # set when an emotion starts playing on the daemon
+        self._next = 0
+        self._lock = threading.Lock()
+
+    def _call(self, *call) -> None:
+        with self._lock:
+            self.calls.append(call)
+
+    def names(self) -> list[str]:
+        return [c[0] for c in self.calls]
+
+    def finish(self) -> None:
+        self.running.clear()
+
+    def wake_up(self) -> None:
+        self._call("wake_up")
+
+    def sleep(self) -> None:
+        self._call("sleep")
+
+    def start_tracking(self, weight: float) -> None:
+        self._call("start_tracking", weight)
+
+    def stop_tracking(self) -> None:
+        self._call("stop_tracking")
+
+    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None:
+        self._call("goto", yaw_deg, pitch_deg, antennas)
+
+    def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
+        self._call("goto_antennas", antennas)
+
+    def play_emotion(self, name: str) -> str:
+        self._call("play_emotion", name)
+        if self.fail_play is not None:
+            raise self.fail_play
+        self._next += 1
+        uuid = f"move-{self._next}"
+        self.running.add(uuid)
+        self.played.set()
+        return uuid
+
+    def move_running(self, uuid: str) -> bool:
+        return uuid in self.running
+
+    def stop_move(self, uuid: str) -> None:
+        self._call("stop_move", uuid)
+        self.running.discard(uuid)
+
+    def motors_up(self) -> bool:
+        return self.motors
+
+    def volume(self) -> int:
+        return self.vol
+
+    def set_volume(self, volume: int) -> None:
+        self._call("set_volume", volume)
+        self.vol = volume
+
+
+class StubHead:
+    """The head owner as the session tools see it: every move granted, nothing played."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def enter_session(self) -> None:
+        self.calls.append("enter_session")
+
+    def request(self, name: str) -> dict:
+        from sonny.head import MOVES
+
+        self.calls.append(name)
+        return {"playing": name, "intensity": MOVES[name].intensity}

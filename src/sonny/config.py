@@ -194,6 +194,18 @@ class Idle:
 
 
 @dataclass(frozen=True)
+class Head:
+    emotions_dataset: str
+    tracking_weight: float
+    glide_s: float
+    rest_antenna_rad: float
+    move_poll_s: float
+    move_timeout_s: float
+    line_wait_s: float
+    cue_timeout_s: float
+
+
+@dataclass(frozen=True)
 class Config:
     robot: Robot
     startup: Startup
@@ -221,6 +233,7 @@ class Config:
     hooks: Hooks
     conductor: Conductor
     idle: Idle
+    head: Head
 
 
 def load_config(path: Path | str | None = None) -> Config:
