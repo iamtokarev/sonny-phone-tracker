@@ -84,6 +84,16 @@ def test_session_completes_on_time_and_hooks_expire_with_it(rig):
     assert any(r["type"] == "hook_expired" for r in records(rig.log.session.path))
 
 
+def test_a_session_runs_until_times_up_and_again_after_an_extend(rig):
+    assert not rig.clock.running
+    rig.clock.start("email", 5)
+    assert rig.clock.running
+    rig.advance(5 * MIN)
+    assert not rig.clock.running and rig.clock.number == 1  # in the grace the head goes idle
+    rig.clock.extend(5)
+    assert rig.clock.running
+
+
 def test_session_log_holds_the_session(rig):
     rig.clock.start("email", 5)
     path = rig.log.session.path

@@ -23,6 +23,7 @@ from sonny.session_log import SessionLog
 from sonny.voice.activity import AgentActivity
 from sonny.voice.pipeline import Conducting, Conversation
 from sonny.voice.prompt import agent_prompt
+from tests.fakes import StubHead
 
 MAX_STEPS_PER_WAKEUP = 6  # LLM calls; a wake-up that needs more never ends on its own
 FILLER = re.compile(r"^\W*(done|ok|okay|noted|sure|silence|\(.*\)|\[.*\]|\*.*\*)\W*$", re.I)
@@ -65,8 +66,9 @@ class Replay:
         bus = EventBus()
         self.clock = FocusClock(cfg, self.log, bus, now=self.time)
         conductor = Conductor(self.clock.snapshot)
+        self.head = StubHead()  # every move granted; moves and lines aren't timed here
         self.tools = SessionTools(
-            cfg, self.clock, lambda type, **f: (self.log.session or self.log.idle).write(type, **f)
+            cfg, self.clock, lambda type, **f: (self.log.session or self.log.idle).write(type, **f), head=self.head
         )
         self.conversation = Conversation(
             self.log,
