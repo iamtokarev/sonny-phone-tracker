@@ -1,5 +1,6 @@
 """The voice pipeline (spec §8): Reachy mic → STT → Wake Word turns → LLM → Pocket TTS → Reachy speaker,
-with the conductor feeding session events to the same LLM (spec §7).
+with the conductor feeding session events to the same LLM (spec §7). The vision worker runs beside it, on the
+same session clock (spec §4).
 
 An idle conversation is a short-lived context: a wake with no window open starts a fresh one. A Focus
 Session keeps one context. Every wake, wake-up, LLM call, tool call and spoken line goes to the log (spec §10).
@@ -41,6 +42,7 @@ from sonny.focus.tools import SessionTools
 from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
+from sonny.vision import VisionWorker
 from sonny.voice.activity import ActivityTap, AgentActivity
 from sonny.voice.gate import MoveCue, MoveGate
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
@@ -285,6 +287,7 @@ class VoicePipeline:
     ) -> None:
         self.cfg = cfg
         self.clock = FocusClock(cfg, log, bus)
+        self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
         conductor = Conductor(self.clock.snapshot)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
         gate = MoveGate(head, cfg.head.move_poll_s)
@@ -391,8 +394,12 @@ class VoicePipeline:
 
         await runner.add_workers(self.worker)
         tasks = [asyncio.create_task(watch()), asyncio.create_task(conduct())]
+        vision_stop = threading.Event()
+        self.vision.start(vision_stop)
         try:
             await runner.run()
         finally:
             for task in tasks:
                 task.cancel()
+            vision_stop.set()
+            self.vision.join(self.cfg.media.reader_join_timeout_s)
