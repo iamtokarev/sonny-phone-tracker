@@ -14,7 +14,9 @@ uv run sonny
 ```
 
 The LLM runs on OpenRouter: put `OPENROUTER_API_KEY=...` in a `.env` at the repo root (it is
-git-ignored). The first start downloads the voice models from Hugging Face.
+git-ignored). The first start downloads the voice models from Hugging Face, and exports RF-DETR
+Nano to CoreML in `models/` (about 20 s, in the background; it prints `vision: RF-DETR Nano on
+CoreML on GPU` once loaded).
 
 Start it from a terminal with macOS Local Network permission: uv's Pythons are blocked when
 started from elsewhere (`[Errno 65] No route to host`). It prints `ready` once Sonny's speaker
@@ -24,7 +26,10 @@ time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctr
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
 Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
-level and still in a Focus Session, with tracking stopped before the session starts. The agent
+level and still in a Focus Session, with tracking stopped before the session starts. In a session
+Sonny watches through its camera (not in a Pause): one slow yaw move re-centres you when you've
+stayed off-centre for 3 s, and after 10 s with nobody in frame it sweeps once to find you. Phone
+Use and Away go to the session log, with a detection summary every second. The agent
 colours its lines with `play_emotion` (18 moves, played on the daemon with their sound at volume
 62); a move and a line never overlap and play in the order the agent called them.
 

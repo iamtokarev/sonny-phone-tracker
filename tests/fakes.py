@@ -83,7 +83,7 @@ class FakeRobot:
     """Stands in for Sonny's head at the head owner's seam: the SDK calls and the daemon REST routes.
 
     A recorded emotion runs until `finish()`; `fail_play` makes the REST play raise; `motors` is what the
-    daemon reports."""
+    daemon reports. While `goto_gate` is set to an unset Event, a head goto blocks until it is set."""
 
     def __init__(self) -> None:
         self.calls: list[tuple] = []
@@ -92,6 +92,8 @@ class FakeRobot:
         self.fail_play: Exception | None = None
         self.vol = 62
         self.played = threading.Event()  # set when an emotion starts playing on the daemon
+        self.goto_gate: threading.Event | None = None
+        self.free_body: list[bool] = []  # per head goto: whether the body was left to turn along
         self._next = 0
         self._lock = threading.Lock()
 
@@ -117,8 +119,19 @@ class FakeRobot:
     def stop_tracking(self) -> None:
         self._call("stop_tracking")
 
-    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None:
+    def goto(
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, free_body: bool = False
+    ) -> None:
         self._call("goto", yaw_deg, pitch_deg, antennas)
+        self.free_body.append(free_body)
+        if self.goto_gate is not None:
+            self.goto_gate.wait(3)
+
+    def aim(self, yaw_deg: float, pitch_deg: float) -> None:
+        self._call("aim", yaw_deg, pitch_deg)
+
+    def aims(self) -> list[float]:
+        return [c[1] for c in self.calls if c[0] == "aim"]
 
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
         self._call("goto_antennas", antennas)

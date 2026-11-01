@@ -118,3 +118,17 @@ def test_poses_and_tracking_go_through_the_sdk(daemon):
     pitch = np.degrees(-np.arcsin(pose_kw["head"][2, 0]))
     assert round(float(pitch), 3) == 5.0 and pose_kw["antennas"] == [-0.17, 0.17] and pose_kw["duration"] == 1.0
     assert mini.calls[3][2] == {"antennas": [0.0, 0.7], "duration": 0.15, "body_yaw": None}
+
+
+def test_framing_moves_leave_the_body_to_turn_along(daemon):
+    """Ticket 19 validated framing with the SDK's automatic body yaw (body_yaw=None); idle poses face front."""
+    mini = SdkMini()
+    robot = ReachyRobot(mini, daemon[2], DATASET)
+    robot.goto(25.0, 0.0, [-0.17, 0.17], 1.0, free_body=True)
+    robot.goto(0.0, 0.0, [-0.17, 0.17], 1.0)
+    robot.aim(-40.0, 0.0)
+    assert [c[0] for c in mini.calls] == ["goto_target", "goto_target", "set_target"]
+    assert mini.calls[0][2]["body_yaw"] is None and mini.calls[1][2]["body_yaw"] == 0.0
+    head = mini.calls[2][2]["head"]
+    assert round(float(np.degrees(np.arctan2(head[1, 0], head[0, 0]))), 3) == -40.0
+    assert "body_yaw" not in mini.calls[2][2]
