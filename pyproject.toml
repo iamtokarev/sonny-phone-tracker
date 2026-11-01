@@ -3,12 +3,14 @@ name = "sonny"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "coremltools>=8.0,<10.0",
     "opencv-python>=5.0.0.93",
     "openwakeword>=0.6.0",
     "parakeet-mlx>=0.5.3",
     "pipecat-ai[openrouter,pocket-tts,silero]>=1.14",
     "python-dotenv>=1.2",
     "reachy-mini==1.11.0",
+    "rfdetr>=1.11.2",
 ]
 keywords = ["reachy-mini-app"]
 

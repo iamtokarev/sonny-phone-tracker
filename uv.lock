@@ -1758,12 +1758,14 @@ name = "sonny"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "coremltools" },
     { name = "opencv-python" },
     { name = "openwakeword" },
     { name = "parakeet-mlx" },
     { name = "pipecat-ai", extra = ["pocket-tts"] },
     { name = "python-dotenv" },
     { name = "reachy-mini" },
+    { name = "rfdetr" },
 ]
 
 [package.dev-dependencies]
@@ -1782,12 +1784,14 @@ experiments = [
 
 [package.metadata]
 requires-dist = [
+    { name = "coremltools", specifier = ">=8.0,<10.0" },
     { name = "opencv-python", specifier = ">=5.0.0.93" },
     { name = "openwakeword", specifier = ">=0.6.0" },
     { name = "parakeet-mlx", specifier = ">=0.5.3" },
     { name = "pipecat-ai", extras = ["openrouter", "pocket-tts", "silero"], specifier = ">=1.14" },
     { name = "python-dotenv", specifier = ">=1.2" },
     { name = "reachy-mini", specifier = "==1.11.0" },
+    { name = "rfdetr", specifier = ">=1.11.2" },
 ]
 
 [package.metadata.requires-dev]
