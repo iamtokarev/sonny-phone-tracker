@@ -22,7 +22,8 @@ def test_defaults_match_spec():
     assert cfg.phone.min_inside_person == 0.30
     assert (cfg.away.start_s, cfg.away.end_presence_s) == (60, 3)
     assert cfg.reframe.gain_per_deg == 0.0082
-    assert cfg.sweep.yaw_range == "full"
+    assert (cfg.reframe.offcentre, cfg.reframe.hold_s) == (0.15, 3)
+    assert (cfg.sweep.after_no_person_s, cfg.sweep.speed_dps) == (10, 40)
     assert (cfg.session.duration_min_min, cfg.session.duration_max_min) == (5, 120)
     assert (cfg.hooks.max_active, cfg.hooks.min_refire_s) == (5, 60)
     assert cfg.media.audio_sample_rate == 16000

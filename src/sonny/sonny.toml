@@ -78,6 +78,13 @@ start_s = 60
 end_presence_s = 3
 max_nudges_per_episode = 2
 
+[vision]
+backend = "coreml"  # native CoreML on GPU (~18 ms/frame, ticket 07); "mps" is torch MPS fp16 (~26 ms), the fallback
+model_path = "models/rfdetr-nano_fp32.mlpackage"  # exported from RF-DETR Nano on first run; relative to where the app runs
+threshold = 0.3  # boxes below this are dropped; the attention rules apply their own, higher thresholds
+settle_s = 0.6  # frames this long after a head move ends still show it (~277 ms command-to-visible lag, ticket 19)
+summary_every_s = 1  # the detection summary in the session log (spec §10)
+
 [blind]
 freeze_s = 5
 reconnect_every_s = 5
@@ -90,11 +97,15 @@ pitch_deg = 0
 offcentre = 0.15
 hold_s = 3
 gain_per_deg = 0.0082
+speed_dps = 20  # one smooth yaw move at this speed (ticket 19's validated correction)
+min_move_s = 0.8  # a small correction still takes this long, so it stays smooth
 
 [sweep]
 after_no_person_s = 10
 speed_dps = 40
-yaw_range = "full"  # the head's full yaw range
+yaw_range_deg = 120  # either side of straight ahead: the head's full yaw with the body turning along (ticket 19)
+step_hz = 50  # how often a sweep steps the head target
+start_look_s = 1  # at session start, nobody in still frames this long means nobody is in frame: sweep at once
 
 [session]
 duration_default_min = 25
