@@ -1,6 +1,7 @@
-"""Startup checks against Sonny's daemon HTTP API (spec §2 "Startup", steps 1-2).
+"""Sonny's daemon HTTP API: the startup checks (spec §2 "Startup", steps 1-2) and the client the head
+owner's REST routes use.
 
-They run before `ReachyMini` opens, so a refusal never starts a media session.
+The startup checks run before `ReachyMini` opens, so a refusal never starts a media session.
 """
 
 import json
@@ -13,6 +14,10 @@ from typing import Any
 LIVE_APP_STATES = {"starting", "running", "stopping"}
 
 
+class DaemonError(Exception):
+    """The daemon couldn't be reached or answered with an error; one line."""
+
+
 class StartupError(Exception):
     """A one-line reason the app refuses to start."""
 
@@ -22,14 +27,25 @@ class DaemonClient:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
 
-    def _get(self, path: str) -> Any:
+    def request(self, path: str, body: Any = None, method: str | None = None) -> Any:
+        """GET `path`, or POST `body` as JSON; the JSON reply. Raises DaemonError."""
         url = self.base_url + path
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(url, data=data, method=method or ("GET" if data is None else "POST"))
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(url, timeout=self.timeout_s) as r:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
                 return json.loads(r.read() or b"null")
         except (OSError, ValueError) as e:
             reason = e.reason if isinstance(e, urllib.error.URLError) else e
-            raise StartupError(f"Can't reach Sonny's daemon at {url}: {reason}") from e
+            raise DaemonError(f"Can't reach Sonny's daemon at {url}: {reason}") from e
+
+    def _get(self, path: str) -> Any:
+        try:
+            return self.request(path)
+        except DaemonError as e:
+            raise StartupError(str(e)) from e
 
     def status(self) -> dict[str, Any]:
         return self._get("/api/daemon/status")
