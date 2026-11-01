@@ -1,6 +1,8 @@
 """The head owner (spec §3 head by mode, §5): one move at a time, the restore, #1453, and the move log."""
 
 import dataclasses
+import itertools
+import threading
 import time
 
 import pytest
@@ -198,3 +200,145 @@ def test_startup_sets_the_volume_only_when_it_differs():
     owner.start()
     owner.quit()
     assert robot.calls[:2] == [("set_volume", 62), ("wake_up",)]
+
+
+# ---------------------------------------------------------------- re-framing and the search sweep (ticket 28)
+
+FAST_SWEEP = dataclasses.replace(
+    CFG,
+    sweep=dataclasses.replace(CFG.sweep, speed_dps=2400, step_hz=100),  # a full sweep in ~0.2 s
+    vision=dataclasses.replace(CFG.vision, settle_s=0.2),
+)
+REST = [-CFG.head.rest_antenna_rad, CFG.head.rest_antenna_rad]
+
+
+@pytest.fixture
+def session_head():
+    robot = FakeRobot()
+    written: list[tuple[str, dict]] = []
+    owner = HeadOwner(FAST_SWEEP, robot, lambda type, **f: written.append((type, f)))
+    owner.start()
+    owner.enter_session()
+    wait_until(lambda: robot.names()[-1:] == ["goto"])
+    yield owner, robot, written
+    owner.quit()
+
+
+def slow_sweep():
+    """A sweep slow enough to stop midway."""
+    return dataclasses.replace(FAST_SWEEP, sweep=dataclasses.replace(FAST_SWEEP.sweep, speed_dps=200))
+
+
+def framing_done(owner: HeadOwner) -> None:
+    wait_until(lambda: not owner.move_active)
+
+
+def test_a_reframe_is_one_yaw_move_from_the_current_framing_yaw(session_head):
+    owner, robot, written = session_head
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST) and robot.free_body[-1]
+    assert owner.reframe(-4.0)
+    framing_done(owner)
+    assert robot.calls[-1][1] == pytest.approx(6.0)
+    starts = [f for t, f in written if t == "move_start"]
+    assert starts[0] == {"name": "reframe", "source": "framing", "yaw_from": 0.0, "yaw_to": 10.0}
+
+
+def test_a_reframe_stays_within_the_yaw_range(session_head):
+    owner, robot, _ = session_head
+    assert owner.reframe(CFG.sweep.yaw_range_deg + 50)
+    framing_done(owner)
+    assert robot.calls[-1][1] == CFG.sweep.yaw_range_deg
+
+
+def test_framing_waits_for_the_glide_to_the_session_pose_and_an_emotion_move(session_head):
+    owner, robot, _ = session_head
+    play(owner, "yes1")
+    robot.played.wait(2)
+    assert not owner.reframe(10.0) and not owner.sweep()
+    robot.finish()
+    framing_done(owner)
+    assert owner.reframe(10.0)
+
+
+def test_an_emotion_move_is_busy_while_a_reframe_plays(session_head):
+    owner, robot, _ = session_head
+    robot.goto_gate = threading.Event()
+    assert owner.reframe(10.0)
+    wait_until(lambda: robot.calls[-1][:2] == ("goto", 10.0))
+    assert "busy" in owner.request("yes1")
+    robot.goto_gate.set()
+    framing_done(owner)
+    assert "playing" in owner.request("yes1")
+
+
+def test_no_framing_outside_a_session():
+    robot = FakeRobot()
+    owner = HeadOwner(FAST_SWEEP, robot, lambda *a, **k: None)
+    owner.start()
+    assert not owner.reframe(10.0) and not owner.sweep()
+    owner.quit()
+
+
+def test_a_sweep_stops_on_the_first_person_and_frames_from_there(session_head):
+    owner, robot, written = session_head
+    owner.cfg = slow_sweep()
+    assert owner.sweep()
+    wait_until(lambda: len(robot.aims()) >= 5)
+    owner.sweep_found()
+    framing_done(owner)
+    stop = robot.aims()[-1]
+    assert 0 < abs(stop) < CFG.sweep.yaw_range_deg
+    assert robot.names()[-1] == "aim"  # it stays where it found someone
+    end = written[-1]
+    assert end[0] == "move_end" and end[1]["name"] == "sweep" and end[1]["found"] is True
+    assert owner.reframe(2.0)
+    framing_done(owner)
+    assert robot.calls[-1][1] == pytest.approx(stop + 2.0)
+
+
+def test_a_sweep_that_finds_nobody_covers_the_yaw_range_and_returns_to_the_framing_pose(session_head):
+    owner, robot, written = session_head
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    assert owner.sweep()
+    framing_done(owner)
+    aims = robot.aims()
+    assert max(aims) == pytest.approx(CFG.sweep.yaw_range_deg) and min(aims) == pytest.approx(-CFG.sweep.yaw_range_deg)
+    steps = [abs(b - a) for a, b in itertools.pairwise(aims)]
+    assert max(steps) <= FAST_SWEEP.sweep.speed_dps / FAST_SWEEP.sweep.step_hz + 1e-9  # a steady speed
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST)
+    assert written[-1][1]["found"] is False
+
+
+def test_stopping_framing_ends_a_sweep_at_the_framing_pose(session_head):
+    owner, robot, _ = session_head
+    owner.cfg = slow_sweep()
+    assert owner.sweep()
+    wait_until(lambda: len(robot.aims()) >= 3)
+    owner.stop_framing()  # a Pause
+    framing_done(owner)
+    assert robot.calls[-1] == ("goto", 0.0, CFG.frame.pitch_deg, REST)
+
+
+def test_the_head_counts_as_moving_through_a_move_and_a_little_after(session_head):
+    owner, robot, _ = session_head
+    time.sleep(FAST_SWEEP.vision.settle_s + 0.05)
+    assert not owner.moving
+    robot.goto_gate = threading.Event()
+    owner.reframe(10.0)
+    wait_until(lambda: robot.calls[-1][:2] == ("goto", 10.0))
+    assert owner.moving
+    robot.goto_gate.set()
+    framing_done(owner)
+    assert owner.moving  # its last frames still show the motion
+    time.sleep(FAST_SWEEP.vision.settle_s + 0.05)
+    assert not owner.moving
+
+
+def test_an_emotion_move_counts_as_moving(session_head):
+    owner, robot, _ = session_head
+    play(owner, "yes1")
+    robot.played.wait(2)
+    assert owner.moving

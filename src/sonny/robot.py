@@ -34,10 +34,17 @@ class ReachyRobot:
     def stop_tracking(self) -> None:
         self._mini.stop_head_tracking()
 
-    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None:
-        """Blocks until the pose is reached."""
+    def goto(
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, free_body: bool = False
+    ) -> None:
+        """Blocks until the pose is reached. The body faces front, or with `free_body` turns along with the head
+        (the SDK's automatic body yaw, as ticket 19 validated framing)."""
         head = create_head_pose(pitch=pitch_deg, yaw=yaw_deg, degrees=True)
-        self._mini.goto_target(head=head, antennas=antennas, duration=duration_s)
+        self._mini.goto_target(head=head, antennas=antennas, duration=duration_s, body_yaw=None if free_body else 0.0)
+
+    def aim(self, yaw_deg: float, pitch_deg: float) -> None:
+        """A head target, at once; the body turns along."""
+        self._mini.set_target(head=create_head_pose(pitch=pitch_deg, yaw=yaw_deg, degrees=True))
 
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
         self._mini.goto_target(antennas=antennas, duration=duration_s, body_yaw=None)
