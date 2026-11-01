@@ -79,6 +79,7 @@ class Replay:
             self.tools,
             keep_s=cfg.idle.conversation_keep_s,
             clock=self.time,
+            on_failed_owner_turn=lambda: None,
         )
         self.conducting = Conducting(self.clock, bus, conductor, self.conversation, busy=lambda: False)
         self.system = {"role": "system", "content": agent_prompt(cfg)}

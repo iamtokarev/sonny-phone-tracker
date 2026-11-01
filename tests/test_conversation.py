@@ -39,7 +39,9 @@ class Time:
         return self.t
 
 
-def conversation(log: SessionLog, bus: EventBus | None = None, session=lambda: None, time=None) -> Conversation:
+def conversation(
+    log: SessionLog, bus: EventBus | None = None, session=lambda: None, time=None, failed_owner_turn=lambda: None
+) -> Conversation:
     return Conversation(
         log,
         bus or EventBus(),
@@ -48,6 +50,7 @@ def conversation(log: SessionLog, bus: EventBus | None = None, session=lambda: N
         session,
         keep_s=CFG.idle.conversation_keep_s,
         clock=time or Time(),
+        on_failed_owner_turn=failed_owner_turn,
     )
 
 
@@ -180,20 +183,31 @@ def test_the_wake_up_for_a_session_end_still_sees_the_session(log):
 
     sessions, bus = Sessions(), EventBus()
     conductor = Conductor(lambda: {"session": None})
-    c = Conversation(log, bus, conductor, AgentActivity(120), sessions, keep_s=60, clock=Time())
+    c = Conversation(
+        log, bus, conductor, AgentActivity(120), sessions, keep_s=60, clock=Time(), on_failed_owner_turn=lambda: None
+    )
     clock = type("Clock", (), {"tick": lambda self: None})()
-    conducting = Conducting(clock, bus, conductor, c, busy=lambda: False)  # type: ignore[arg-type]
+    freed: list[bool] = []
+    conducting = Conducting(
+        clock,  # type: ignore[arg-type]
+        bus,
+        conductor,
+        c,
+        busy=lambda: False,
+        on_free=lambda: freed.append(True),
+    )
     sessions.number = 1
     c.deliver(wakeup("session.started"))
     owner_says(c, "pause please")
     sessions.number = None  # 30 min paused: the clock ended the session
     bus.publish(Event(EventType.SESSION_ENDED, {"reason": EndReason.PAUSE_TIMEOUT}))
     message = conducting.step()
-    assert message is not None
+    assert message is not None and freed == []
     c.context.add_message(message)
     assert contents(c)[0] == "pause please"
     assert conducting.step() is None  # that wake-up is over: the context goes with the session
     assert contents(c) == []
+    assert freed == [True]  # and the head may leave the session
 
 
 def test_a_wake_soon_after_a_silent_stop_keeps_the_conversation(log):
@@ -208,3 +222,24 @@ def test_a_wake_soon_after_a_silent_stop_keeps_the_conversation(log):
     c.on_wake(NEW)  # the window has closed
     owner_says(c, "what were you just telling me about?")
     assert contents(c)[0] == "tell me a story about a cat"
+
+
+def test_a_failed_owner_turn_asks_for_the_confused_move(log):
+    confused: list[str] = []
+    c = conversation(log, failed_owner_turn=lambda: confused.append("inquiring2"))
+    owner_says(c, "how are you")
+    c.on_llm_call(call(ok=False, error="cap"))
+    assert confused == ["inquiring2"]
+    owner_says(c, "hello?")
+    c.on_llm_call(call(ok=False, error="interrupted"))  # a barge-in is not a failure
+    assert confused == ["inquiring2"]
+
+
+def test_a_failed_event_wake_up_plays_no_move(log):
+    confused: list[str] = []
+    c = conversation(log, failed_owner_turn=lambda: confused.append("inquiring2"))
+    message = wakeup_message({"event": "timer", "hooks": [], "state": {}})
+    c.context.add_message(message)
+    c.deliver(message)
+    c.on_llm_call(call(ok=False, error="cap"))
+    assert confused == []
