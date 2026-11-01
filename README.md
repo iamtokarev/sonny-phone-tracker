@@ -23,6 +23,11 @@ Session ("Hey Sonny, let's work on my slides for 25 minutes"); in a session you 
 time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctrl-C puts Sonny in
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
+Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
+level and still in a Focus Session, with tracking stopped before the session starts. The agent
+colours its lines with `play_emotion` (18 moves, played on the daemon with their sound at volume
+62); a move and a line never overlap and play in the order the agent called them.
+
 Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
 the whole file and point `SONNY_CONFIG` at the copy.
 

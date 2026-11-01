@@ -27,6 +27,7 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMStandardMessage
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.turns.user_start import VADUserTurnStartStrategy
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
@@ -37,9 +38,11 @@ from sonny.events import Event, EventBus, EventType
 from sonny.focus.clock import FocusClock
 from sonny.focus.conductor import Conductor, wakeup_payload
 from sonny.focus.tools import SessionTools
+from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
 from sonny.voice.activity import ActivityTap, AgentActivity
+from sonny.voice.gate import MoveCue, MoveGate
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
 from sonny.voice.models import ParakeetSTT, load_wake_scorer, pocket_tts
 from sonny.voice.prompt import agent_prompt
@@ -277,11 +280,14 @@ class Conducting:
 class VoicePipeline:
     """Loads the models and builds the pipeline; `run()` holds conversations and Focus Sessions until stopped."""
 
-    def __init__(self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, api_key: str) -> None:
+    def __init__(
+        self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, api_key: str
+    ) -> None:
         self.cfg = cfg
         self.clock = FocusClock(cfg, log, bus)
         conductor = Conductor(self.clock.snapshot)
-        tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f))
+        tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
+        gate = MoveGate(head, cfg.head.move_poll_s)
         self.activity = AgentActivity(cfg.conductor.stuck_after_s)
         self.conversation = Conversation(
             log,
@@ -291,12 +297,17 @@ class VoicePipeline:
             lambda: self.clock.number,
             tools=tools,
             keep_s=cfg.idle.conversation_keep_s,
+            on_failed_owner_turn=lambda: head.play_now(FAILED_TURN_MOVE, gate.line_pending, source="failed_turn"),
         )
         rate = cfg.media.audio_sample_rate
         line = LineTracker(self.conversation.on_line)
-        self.wake = WakeWordTurnStart(
-            cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, self.conversation.on_wake
-        )
+
+        def wake(seen: WakeSeen) -> None:
+            self.conversation.on_wake(seen)
+            if not seen.ignored:
+                head.converse()
+
+        self.wake = WakeWordTurnStart(cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, wake)
 
         def bare_wake(text: str) -> None:
             self.conversation.on_bare_wake(text)
@@ -318,12 +329,22 @@ class VoicePipeline:
         )
         for name in tools.names:
             llm.register_function(name, tools.handle)
+
+        async def play_emotion(params: FunctionCallParams) -> None:
+            """The cue goes down the stream behind the line said so far, before the result lets a new one come."""
+            result = tools.call("play_emotion", dict(params.arguments))
+            if "playing" in result:
+                await params.llm.push_frame(MoveCue(result["playing"]))
+            await params.result_callback(result)
+
+        llm.register_function("play_emotion", play_emotion)
         self.conducting = Conducting(
             self.clock,
             bus,
             conductor,
             self.conversation,
             busy=lambda: self.activity.busy or self.wake.in_turn or self.wake.bot_speaking,
+            on_free=lambda: head.settle(self.clock.running, self.wake.window_open or self.wake.in_turn),
         )
         transport = ReachyTransport(hub, cfg.voice, cfg.tts)
         pipeline = Pipeline(
@@ -337,6 +358,7 @@ class VoicePipeline:
                 llm,
                 ActivityTap(self.activity),
                 line,
+                gate,
                 pocket_tts(cfg.tts),
                 transport.output(),
                 assistant,
