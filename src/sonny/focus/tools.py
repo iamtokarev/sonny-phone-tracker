@@ -8,7 +8,7 @@ follows its tool results with the same call again, empty, and `extend({})` would
 """
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Protocol
 
 from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.adapters.llm.schemas.tools_schema import ToolsSchema
@@ -16,6 +16,14 @@ from pipecat.services.llm_service import FunctionCallParams
 
 from sonny.config import Config
 from sonny.focus.clock import AGENT_HOOKS, FocusClock, Refused
+from sonny.head import MOVES
+
+
+class Head(Protocol):
+    """The head owner as the tools see it."""
+
+    def enter_session(self) -> None: ...
+    def request(self, name: str) -> dict: ...
 
 
 def _schemas(cfg: Config) -> list[FunctionSchema]:
@@ -67,6 +75,16 @@ def _schemas(cfg: Config) -> list[FunctionSchema]:
         ),
         FunctionSchema("list_hooks", "List the active hooks.", {}, []),
         FunctionSchema("cancel_hook", "Cancel a hook by its id.", {"id": {"type": "integer"}}, ["id"]),
+        FunctionSchema(
+            "play_emotion",
+            "Play a move on your head and antennas. Moves and your lines never overlap: they play in the "
+            "order you call and say them. One move at a time: during another head move this returns `busy` "
+            "and nothing is queued; with the motors down it returns `unavailable`. Intensity runs subtle, "
+            "medium, strong. The moves:\n"
+            + "\n".join(f"- {name} ({m.intensity}): {m.meaning}" for name, m in MOVES.items()),
+            {"name": {"type": "string", "enum": list(MOVES)}},
+            ["name"],
+        ),
     ]
 
 
@@ -74,12 +92,12 @@ ONCE_PER_WAKEUP = {"start_session", "extend", "pause", "resume", "end_session", 
 
 
 class SessionTools:
-    def __init__(self, cfg: Config, clock: FocusClock, write: Callable[..., None]) -> None:
+    def __init__(self, cfg: Config, clock: FocusClock, write: Callable[..., None], *, head: Head) -> None:
         self.schemas = _schemas(cfg)
         self.tools = ToolsSchema(standard_tools=self.schemas)
         self._write = write  # a log record: write(type, **fields)
         self._handlers: dict[str, Callable[..., dict]] = {
-            "start_session": clock.start,
+            "start_session": lambda **args: self._start(clock, head, **args),
             "extend": clock.extend,
             "pause": clock.pause,
             "resume": clock.resume,
@@ -88,9 +106,16 @@ class SessionTools:
             "set_hook": clock.set_hook,
             "list_hooks": clock.list_hooks,
             "cancel_hook": clock.cancel_hook,
+            "play_emotion": head.request,
         }
         assert set(self._handlers) == {f.name for f in self.schemas}
         self._done: set[str] = set()  # session-changing tools that ran in this wake-up
+
+    @staticmethod
+    def _start(clock: FocusClock, head: Head, task: str, duration_minutes: float | None = None) -> dict:
+        """The head stops daemon tracking before the session starts (spec §3)."""
+        head.enter_session()
+        return clock.start(task, duration_minutes)
 
     @property
     def names(self) -> list[str]:

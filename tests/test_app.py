@@ -7,6 +7,7 @@ import sonny.main as main_mod
 from sonny.config import load_config
 from sonny.daemon import StartupError
 from sonny.main import Sonny
+from sonny.robot import ReachyRobot
 from sonny.session_log import SessionLog
 from tests.fakes import FakeMedia, FakeMini
 
@@ -24,9 +25,20 @@ class FakeVoice:
         stop.wait()
 
 
+class QuietDaemon:
+    """The daemon's REST routes at startup: Sonny's volume is already right."""
+
+    def request(self, path, body=None):
+        return {"volume": CFG.robot.volume}
+
+
+def robot(cfg, mini):
+    return ReachyRobot(mini, QuietDaemon(), cfg.head.emotions_dataset)
+
+
 @pytest.fixture
 def app(tmp_path):
-    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice)
+    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot)
 
 
 def speaker_up_after(fake: FakeMedia, seconds: float) -> None:
@@ -71,7 +83,7 @@ def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, capsys):
 
     cfg = dataclasses.replace(CFG, startup=dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.1))
     mini = FakeMini()
-    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice).run(mini, threading.Event())
+    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot).run(mini, threading.Event())
     out = capsys.readouterr().out
     assert "ready" not in out and "speaker" in out
     assert mini.calls[-1] == "goto_sleep"

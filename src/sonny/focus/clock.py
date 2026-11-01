@@ -59,6 +59,11 @@ class FocusClock:
         """Which session is open (1 for the app's first), or None."""
         return self._started if self._session is not None else None
 
+    @property
+    def running(self) -> bool:
+        """A session is open and its time isn't up (the grace after time's up doesn't count)."""
+        return self._session is not None and self._session.time_up_at is None
+
     def _elapsed_s(self, s: Session) -> float:
         until = s.paused_since if s.paused_since is not None else self._now()
         return min(s.duration_s, until - s.started - s.paused_total_s)

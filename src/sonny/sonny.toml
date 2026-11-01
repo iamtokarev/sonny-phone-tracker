@@ -123,3 +123,14 @@ stuck_after_s = 20  # a wake-up showing no activity this long stops holding even
 
 [idle]
 conversation_keep_s = 60  # an idle conversation's context lives this long after its last turn or line; the wake window stays [wake] window_s
+
+[head]
+emotions_dataset = "pollen-robotics/reachy-mini-emotions-library"  # played through the daemon REST route
+tracking_weight = 1  # daemon face tracking in an idle conversation
+glide_s = 1  # duration of a glide between modes, and of the restore after a move
+rest_antenna_rad = 0.1745  # antennas at rest are [-a, +a] (the SDK's neutral, ~10° off vertical)
+move_poll_s = 0.1  # how often a running move, or a line it waits for, is checked
+move_timeout_s = 30  # a move still running after this is stopped
+line_wait_s = 20  # a move waits at most this long for the line before it to be spoken
+cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops making others busy
+motors_check_s = 5  # how often an idle head owner asks the daemon whether the motors are up (play_emotion: unavailable)

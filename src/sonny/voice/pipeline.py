@@ -27,6 +27,7 @@ from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext, LLMStandardMessage
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.services.llm_service import FunctionCallParams
 from pipecat.turns.user_start import VADUserTurnStartStrategy
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
@@ -37,9 +38,11 @@ from sonny.events import Event, EventBus, EventType
 from sonny.focus.clock import FocusClock
 from sonny.focus.conductor import Conductor, wakeup_payload
 from sonny.focus.tools import SessionTools
+from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
 from sonny.voice.activity import ActivityTap, AgentActivity
+from sonny.voice.gate import MoveCue, MoveGate
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
 from sonny.voice.models import ParakeetSTT, load_wake_scorer, pocket_tts
 from sonny.voice.prompt import agent_prompt
@@ -95,7 +98,7 @@ class Conversation:
     long it remembers, so a wake just after a silent "stop" still continues the conversation.) A Focus
     Session keeps one context from the conversation that started it until the session closes. A failed
     wake-up is cut from the context at the next owner turn, after the assistant aggregator has added
-    whatever partial reply it got (spec §7).
+    whatever partial reply it got (spec §7); a failed owner turn also asks for the confused move.
     """
 
     def __init__(
@@ -109,6 +112,7 @@ class Conversation:
         *,
         keep_s: float,
         clock: Callable[[], float] = time.monotonic,
+        on_failed_owner_turn: Callable[[], object],  # its result is ignored
     ) -> None:
         self.context = LLMContext(tools=tools.tools) if tools is not None else LLMContext()
         self._tools = tools
@@ -116,6 +120,7 @@ class Conversation:
         self._session = session  # the open Focus Session's number, or None
         self._context_session: int | None = None  # the session this context belongs to
         self._keep_s, self._clock = keep_s, clock
+        self._on_failed_owner_turn = on_failed_owner_turn  # spec §7: a confused move, no words
         self._last_said = -float("inf")  # clock time of the last turn, wake-up, LLM call or line
         self._replying = False  # a wake-up went to the LLM and Sonny hasn't finished answering it
         self._failed_from: int | None = None  # where a failed wake-up starts in the context
@@ -197,8 +202,11 @@ class Conversation:
         if not call.ok or call.first_text_s is None:
             self._replying = False  # nothing will be said
         if not call.ok and call.error != "interrupted":
-            turns = [i for i, m in enumerate(self.context.get_messages()) if _is_turn(m)]
+            messages = self.context.get_messages()
+            turns = [i for i, m in enumerate(messages) if _is_turn(m)]
             self._failed_from = turns[-1] if turns else None
+            if turns and _is_owner_turn(messages[turns[-1]]):
+                self._on_failed_owner_turn()
 
     def on_line(self, line: SpokenLine) -> None:
         self._write("line", **asdict(line))
@@ -247,8 +255,10 @@ class Conducting:
         conductor: Conductor,
         conversation: Conversation,
         busy: Callable[[], bool],
+        on_free: Callable[[], None] = lambda: None,
     ) -> None:
         self._clock, self._conductor, self._conversation, self._busy = clock, conductor, conversation, busy
+        self._on_free = on_free  # nothing to deliver and the agent is free: the head may settle
         self._events = bus.subscribe()
 
     def step(self) -> LLMStandardMessage | None:
@@ -261,6 +271,7 @@ class Conducting:
         message = self._conductor.next_wakeup()
         if message is None:
             self._conversation.on_idle()  # only now: a session's last wake-up still needs its context
+            self._on_free()
         else:
             self._conversation.deliver(message)
         return message
@@ -269,11 +280,14 @@ class Conducting:
 class VoicePipeline:
     """Loads the models and builds the pipeline; `run()` holds conversations and Focus Sessions until stopped."""
 
-    def __init__(self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, api_key: str) -> None:
+    def __init__(
+        self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, api_key: str
+    ) -> None:
         self.cfg = cfg
         self.clock = FocusClock(cfg, log, bus)
         conductor = Conductor(self.clock.snapshot)
-        tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f))
+        tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
+        gate = MoveGate(head, cfg.head.move_poll_s)
         self.activity = AgentActivity(cfg.conductor.stuck_after_s)
         self.conversation = Conversation(
             log,
@@ -283,12 +297,17 @@ class VoicePipeline:
             lambda: self.clock.number,
             tools=tools,
             keep_s=cfg.idle.conversation_keep_s,
+            on_failed_owner_turn=lambda: head.play_now(FAILED_TURN_MOVE, gate.line_pending, source="failed_turn"),
         )
         rate = cfg.media.audio_sample_rate
         line = LineTracker(self.conversation.on_line)
-        self.wake = WakeWordTurnStart(
-            cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, self.conversation.on_wake
-        )
+
+        def wake(seen: WakeSeen) -> None:
+            self.conversation.on_wake(seen)
+            if not seen.ignored:
+                head.converse()
+
+        self.wake = WakeWordTurnStart(cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, wake)
 
         def bare_wake(text: str) -> None:
             self.conversation.on_bare_wake(text)
@@ -309,13 +328,24 @@ class VoicePipeline:
             cfg.llm, api_key=api_key, system_instruction=agent_prompt(cfg), on_call=self.conversation.on_llm_call
         )
         for name in tools.names:
-            llm.register_function(name, tools.handle)
+            if name != "play_emotion":
+                llm.register_function(name, tools.handle)
+
+        async def play_emotion(params: FunctionCallParams) -> None:
+            """The cue goes down the stream behind the line said so far, before the result lets a new one come."""
+            result = tools.call("play_emotion", dict(params.arguments))
+            if "playing" in result:
+                await params.llm.push_frame(MoveCue(result["playing"]))
+            await params.result_callback(result)
+
+        llm.register_function("play_emotion", play_emotion)
         self.conducting = Conducting(
             self.clock,
             bus,
             conductor,
             self.conversation,
             busy=lambda: self.activity.busy or self.wake.in_turn or self.wake.bot_speaking,
+            on_free=lambda: head.settle(self.clock.running, self.wake.window_open or self.wake.in_turn),
         )
         transport = ReachyTransport(hub, cfg.voice, cfg.tts)
         pipeline = Pipeline(
@@ -329,6 +359,7 @@ class VoicePipeline:
                 llm,
                 ActivityTap(self.activity),
                 line,
+                gate,
                 pocket_tts(cfg.tts),
                 transport.output(),
                 assistant,
