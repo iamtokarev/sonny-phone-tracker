@@ -132,4 +132,5 @@ rest_antenna_rad = 0.1745  # antennas at rest are [-a, +a] (the SDK's neutral, ~
 move_poll_s = 0.1  # how often a running move, or a line it waits for, is checked
 move_timeout_s = 30  # a move still running after this is stopped
 line_wait_s = 20  # a move waits at most this long for the line before it to be spoken
-cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops holding lines
+cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops making others busy
+motors_check_s = 5  # how often an idle head owner asks the daemon whether the motors are up (play_emotion: unavailable)

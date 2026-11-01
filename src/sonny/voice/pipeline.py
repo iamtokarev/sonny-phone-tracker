@@ -112,7 +112,7 @@ class Conversation:
         *,
         keep_s: float,
         clock: Callable[[], float] = time.monotonic,
-        on_failed_owner_turn: Callable[[], object],
+        on_failed_owner_turn: Callable[[], object],  # its result is ignored
     ) -> None:
         self.context = LLMContext(tools=tools.tools) if tools is not None else LLMContext()
         self._tools = tools
@@ -328,7 +328,8 @@ class VoicePipeline:
             cfg.llm, api_key=api_key, system_instruction=agent_prompt(cfg), on_call=self.conversation.on_llm_call
         )
         for name in tools.names:
-            llm.register_function(name, tools.handle)
+            if name != "play_emotion":
+                llm.register_function(name, tools.handle)
 
         async def play_emotion(params: FunctionCallParams) -> None:
             """The cue goes down the stream behind the line said so far, before the result lets a new one come."""

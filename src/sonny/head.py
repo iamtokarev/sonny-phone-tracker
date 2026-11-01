@@ -12,7 +12,7 @@ antennas. Re-framing and the search sweep come with ticket 28.
   interrupted ones too, the head returns to its mode's pose.
 - **Call order.** A granted move doesn't start at once: its cue comes down the frame stream after any line
   the agent said before calling it (`MoveGate`), and it waits for that line to be spoken. A line that comes
-  after the cue waits for the move (`move_active`).
+  after the cue waits for the move (`move_cued`).
 
 All robot calls run on one worker thread, in order, except `enter_session`'s tracking stop, which must
 happen before the session starts. Every move writes `move_start` and `move_end` to the log.
@@ -95,6 +95,8 @@ class Robot(Protocol):
 
 
 class HeadOwner:
+    """Owns Sonny's head: the mode's pose and tracking, and one emotion move at a time."""
+
     def __init__(
         self,
         cfg: Config,
@@ -102,7 +104,7 @@ class HeadOwner:
         write: Callable[..., None],
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self.cfg, self.c = cfg, cfg.head
+        self.cfg, self._c = cfg, cfg.head
         self._robot, self._write, self._clock = robot, write, clock  # write(type, **fields): a log record
         self._mode = Mode.IDLE  # the pose the head should be in; the worker brings it there
         self._tracking: float | None = None  # the weight daemon tracking runs at, or None when stopped
@@ -130,7 +132,7 @@ class HeadOwner:
         self._stop.set()
         self._jobs.put(None)
         if self._worker.is_alive():
-            self._worker.join(self.c.move_timeout_s)
+            self._worker.join(self._c.move_timeout_s)
         self._mode = Mode.ASLEEP
         try:
             with self._robot_lock:
@@ -140,7 +142,15 @@ class HeadOwner:
             self._robot.sleep()
 
     def _run(self) -> None:
-        while (job := self._jobs.get()) is not None:
+        """Runs the jobs in order; when idle, checks the motors every `motors_check_s`, so `play_emotion`
+        answers `unavailable` without trying first."""
+        while True:
+            try:
+                job = self._jobs.get(timeout=self._c.motors_check_s)
+            except queue.Empty:
+                job = self._motors_up
+            if job is None:
+                return
             try:
                 job()
             except Exception as e:
@@ -156,18 +166,17 @@ class HeadOwner:
         """A wake with no session: Sonny faces the owner."""
         if self._mode is Mode.IDLE:
             self._mode = Mode.CONVERSATION
-            self._jobs.put(self._settle_pose)
+            self._jobs.put(self._settle_job)
 
     def enter_session(self) -> None:
         """Called before a session starts: tracking stops here and now, so the session never uses a frame
         taken while the daemon tracks (it stalls Mac video), then the head glides to the framing pose."""
         with self._robot_lock:
-            if self._tracking is not None:
-                self._robot.start_tracking(0.0)  # #1453
+            self._zero_tracking()
             self._robot.stop_tracking()
             self._tracking = None
-        self._mode = Mode.SESSION
-        self._jobs.put(self._settle_pose)
+            self._mode = Mode.SESSION  # under the lock: a settle on the worker can't turn tracking back on
+        self._jobs.put(self._settle_job)
 
     def settle(self, session_running: bool, listening: bool) -> None:
         """Called whenever the agent is free: leave a conversation or a session that is over. Queued moves
@@ -177,50 +186,67 @@ class HeadOwner:
                 self.enter_session()  # an extend after time's up
         elif self._mode is Mode.SESSION or (self._mode is Mode.CONVERSATION and not listening):
             self._mode = Mode.IDLE
-            self._jobs.put(self._settle_pose)
+            self._jobs.put(self._settle_job)
+
+    def _settle_job(self) -> None:
+        if not self._stop.is_set():  # quitting: the head goes to sleep instead
+            self._settle_pose()
 
     def _settle_pose(self) -> None:
         """Bring the head to its mode's pose and tracking. Runs on the worker."""
         mode = self._mode
         if mode is Mode.ASLEEP:
             return
-        rest = [-self.c.rest_antenna_rad, self.c.rest_antenna_rad]
+        rest = [-self._c.rest_antenna_rad, self._c.rest_antenna_rad]
         with self._robot_lock:
-            if self._tracking is not None:
-                self._robot.start_tracking(0.0)  # #1453
-                self._tracking = 0.0
-                if mode is not Mode.CONVERSATION:
-                    self._robot.stop_tracking()
-                    self._tracking = None
+            if self._zero_tracking() and mode is not Mode.CONVERSATION:
+                self._robot.stop_tracking()
+                self._tracking = None
         if mode is Mode.SESSION:
-            self._robot.goto(0.0, self.cfg.frame.pitch_deg, rest, self.c.glide_s)
+            self._robot.goto(0.0, self.cfg.frame.pitch_deg, rest, self._c.glide_s)
         else:
-            self._robot.goto(0.0, 0.0, rest, self.c.glide_s)
+            self._robot.goto(0.0, 0.0, rest, self._c.glide_s)
         with self._robot_lock:
-            if self._mode is Mode.CONVERSATION:
-                self._robot.start_tracking(self.c.tracking_weight)
-                self._tracking = self.c.tracking_weight
+            if mode is Mode.CONVERSATION and self._mode is Mode.CONVERSATION:  # not left meanwhile
+                self._robot.start_tracking(self._c.tracking_weight)
+                self._tracking = self._c.tracking_weight
+
+    def _zero_tracking(self) -> bool:
+        """#1453: while tracking runs, a head target is ignored at weight 1 once a face was lost, so the weight
+        goes to 0 before any app-driven motion. Says whether tracking was on. Hold `_robot_lock`."""
+        if self._tracking is None:
+            return False
+        self._robot.start_tracking(0.0)
+        self._tracking = 0.0
+        return True
 
     # ---------------------------------------------------------------- moves
 
     @property
     def move_active(self) -> bool:
-        """A granted move hasn't finished: lines wait while this holds."""
+        """A granted move hasn't finished: another is `busy`."""
         with self._lock:
-            if self._reserved is not None and self._clock() - self._reserved[1] > self.c.cue_timeout_s:
-                self._reserved = None  # its cue never came (an interrupted turn)
-            return self._reserved is not None or self._queued is not None or self._playing is not None
+            return self._move_active_locked()
+
+    @property
+    def move_cued(self) -> bool:
+        """A move has its place in the call order and hasn't finished: lines that come after it wait."""
+        with self._lock:
+            return self._queued is not None or self._playing is not None
+
+    def _move_active_locked(self) -> bool:
+        granted = self._reserved is not None and self._clock() - self._reserved[1] <= self._c.cue_timeout_s
+        return granted or self._queued is not None or self._playing is not None  # a stale grant's cue never came
 
     def request(self, name: str) -> dict:
         """`play_emotion`: grant the move, or say why not. A granted move plays once its cue arrives."""
         if name not in MOVES:
             return {"error": f"no move {name!r}"}
         if not self._motors_ok:
-            self._jobs.put(self._probe_motors)  # a later request may find them back
             return {"unavailable": "Sonny's motors are down; speak instead"}
-        if self.move_active:
-            return {"busy": "another head move is playing; nothing was queued"}
         with self._lock:
+            if self._move_active_locked():
+                return {"busy": "another head move is playing; nothing was queued"}
             self._reserved = (name, self._clock())
         return {"playing": name, "intensity": MOVES[name].intensity}
 
@@ -246,25 +272,25 @@ class HeadOwner:
         return result
 
     def _play(self, name: str, after_line: Callable[[], bool], source: str) -> None:
-        deadline = self._clock() + self.c.line_wait_s
-        while after_line() and self._clock() < deadline and not self._stop.wait(self.c.move_poll_s):
+        deadline = self._clock() + self._c.line_wait_s
+        while after_line() and self._clock() < deadline and not self._stop.wait(self._c.move_poll_s):
             pass
         with self._lock:
-            if self._queued != name:
-                return  # cancelled by a barge-in
+            if self._queued != name or self._stop.is_set():
+                self._queued = None
+                return  # cancelled by a barge-in, or the app is quitting
             self._queued, self._playing = None, name
+        if not self._motors_up():
+            with self._lock:
+                self._playing = None
+            self._write("move_skipped", name=name, reason="motors down")
+            return
         start = self._clock()
         self._write("move_start", name=name, intensity=MOVES[name].intensity, source=source)
         error: str | None = None
         try:
-            if not self._robot.motors_up():
-                self._motors_ok = False
-                error = "motors down"
-                return
             with self._robot_lock:
-                if self._tracking is not None:
-                    self._robot.start_tracking(0.0)  # #1453
-                    self._tracking = 0.0
+                self._zero_tracking()
             if name in GESTURES:
                 self._gesture(GESTURES[name])
             else:
@@ -297,13 +323,17 @@ class HeadOwner:
 
     def _emotion(self, name: str) -> None:
         uuid = self._robot.play_emotion(name)
-        deadline = self._clock() + self.c.move_timeout_s
+        deadline = self._clock() + self._c.move_timeout_s
         while self._robot.move_running(uuid):
-            if self._stop.wait(self.c.move_poll_s) or self._clock() >= deadline:
+            if self._stop.wait(self._c.move_poll_s) or self._clock() >= deadline:
                 self._robot.stop_move(uuid)
                 if not self._stop.is_set():
-                    raise TimeoutError(f"still running after {self.c.move_timeout_s:g} s")
+                    raise TimeoutError(f"still running after {self._c.move_timeout_s:g} s")
                 return
 
-    def _probe_motors(self) -> None:
-        self._motors_ok = self._robot.motors_up()
+    def _motors_up(self) -> bool:
+        try:
+            self._motors_ok = self._robot.motors_up()
+        except Exception:
+            self._motors_ok = False
+        return self._motors_ok

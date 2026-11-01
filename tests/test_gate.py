@@ -13,7 +13,7 @@ from sonny.voice.gate import MoveCue, MoveGate
 
 class FakeHead:
     def __init__(self) -> None:
-        self.move_active = False
+        self.move_cued = False
         self.cues: list[tuple[str, object, bool]] = []  # name, after_line, after_line() at cue time
         self.cancels = 0
 
@@ -42,11 +42,11 @@ def run(gate: MoveGate, frames: list[Frame], events: list[str]) -> None:
 
 def test_a_line_queued_during_a_move_plays_after_it_ends():
     head, events = FakeHead(), []
-    head.move_active = True
+    head.move_cued = True
 
     def move_ends() -> None:
         events.append("move ended")
-        head.move_active = False
+        head.move_cued = False
 
     threading.Timer(0.3, move_ends).start()
     run(MoveGate(head, poll_s=0.01), [LLMTextFrame("Okay, take five."), SleepFrame(0.5)], events)

@@ -4,7 +4,8 @@
 said in that reply. Here, in stream order:
 - a cue hands the move to the head owner, which plays it once the line forwarded before the cue has been
   spoken (Sonny stopped speaking, or a barge-in);
-- a line that comes after a cue waits here while the move is granted, waiting or playing.
+- a line that comes after a cue waits here until the move has played. A line still on its way here when the
+  move is granted, said before the call, passes: it isn't after the cue.
 
 A barge-in cancels a move that hasn't started. Waiting blocks only data frames; Pipecat cancels the wait
 on an interruption and drops what was held.
@@ -28,7 +29,7 @@ class MoveCue(DataFrame):
 
 class Head(Protocol):
     @property
-    def move_active(self) -> bool: ...
+    def move_cued(self) -> bool: ...
     def cue(self, name: str, after_line: Callable[[], bool], source: str = "agent") -> None: ...
     def cancel_pending(self) -> None: ...
 
@@ -53,7 +54,7 @@ class MoveGate(FrameProcessor):
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._unspoken = False
         elif isinstance(frame, LLMTextFrame) and direction is FrameDirection.DOWNSTREAM:
-            while self._head.move_active:
+            while self._head.move_cued:
                 await asyncio.sleep(self._poll_s)
             if frame.text.strip():
                 self._unspoken = True

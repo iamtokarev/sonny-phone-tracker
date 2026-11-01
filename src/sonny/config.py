@@ -203,6 +203,7 @@ class Head:
     move_timeout_s: float
     line_wait_s: float
     cue_timeout_s: float
+    motors_check_s: float
 
 
 @dataclass(frozen=True)

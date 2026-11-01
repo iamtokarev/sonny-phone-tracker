@@ -1,5 +1,8 @@
 """The head owner (spec §3 head by mode, §5): one move at a time, the restore, #1453, and the move log."""
 
+import dataclasses
+import time
+
 import pytest
 
 from sonny.config import load_config
@@ -10,8 +13,6 @@ CFG = load_config()
 
 
 def wait_until(cond, timeout: float = 3.0) -> None:
-    import time
-
     end = time.monotonic() + timeout
     while not cond():
         assert time.monotonic() < end, "timed out"
@@ -120,15 +121,35 @@ def test_after_a_session_the_head_glides_to_idle(head):
     assert owner.mode == "idle" and robot.calls[-1][1:3] == (0.0, 0.0)
 
 
-def test_motors_down_makes_play_emotion_unavailable(head):
-    owner, robot, _ = head
+def test_motors_down_makes_play_emotion_unavailable_without_trying_first():
+    cfg = dataclasses.replace(CFG, head=dataclasses.replace(CFG.head, motors_check_s=0.05))
+    robot, written = FakeRobot(), []
+    owner = HeadOwner(cfg, robot, lambda type, **f: written.append((type, f)))
+    robot.motors = False
+    owner.start()
+    time.sleep(0.2)  # a few idle checks
+    assert "unavailable" in owner.request("yes1")
+    robot.motors = True
+    wait_until(lambda: "playing" in owner.request("perk"))
+    owner.quit()
+    assert "play_emotion" not in robot.names()
+
+
+def test_a_move_whose_motors_drop_before_it_plays_is_skipped_not_started(head):
+    owner, robot, written = head
     robot.motors = False
     play(owner, "yes1")
     wait_until(lambda: not owner.move_active)
+    assert written[-1] == ("move_skipped", {"name": "yes1", "reason": "motors down"})
     assert "unavailable" in owner.request("yes1")
-    assert "play_emotion" not in robot.names()
-    robot.motors = True
-    wait_until(lambda: "playing" in owner.request("perk"))
+
+
+def test_a_granted_move_holds_no_line_until_its_cue(head):
+    owner, _, _ = head
+    owner.request("yes1")
+    assert owner.move_active and not owner.move_cued  # a line said before the call still passes
+    owner.cue("yes1", after_line=lambda: True)
+    assert owner.move_cued
 
 
 def test_a_move_waits_for_the_line_said_before_it(head):
