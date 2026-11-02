@@ -4,11 +4,13 @@ Run with `uv run sonny` from a terminal that has macOS Local Network permission.
 """
 
 import asyncio
+import fcntl
 import os
 import sys
 import threading
 from collections.abc import Callable, Coroutine
-from typing import Any, Protocol
+from pathlib import Path
+from typing import IO, Any, Protocol
 
 from dotenv import find_dotenv, load_dotenv
 from reachy_mini import ReachyMini, ReachyMiniApp
@@ -97,8 +99,29 @@ def _step(name: str, fn: Callable[[], object]) -> None:
         print(f"quit: {name} failed: {e}", flush=True)
 
 
+def claim_instance(log_dir: Path | str) -> IO[str] | None:
+    """Lock `sonny.lock` in the log folder for this process's lifetime; None if another Sonny holds it. Keep the
+    returned file open: the lock goes with it."""
+    path = Path(log_dir) / "sonny.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = path.open("a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        return None
+    f.truncate(0)
+    f.write(f"{os.getpid()}\n")
+    f.flush()
+    return f
+
+
 def main() -> int:
     cfg = load_config()
+    if (lock := claim_instance(cfg.log.dir)) is None:
+        pid = (Path(cfg.log.dir) / "sonny.lock").read_text().strip()
+        print(f"Sonny is already running (pid {pid}); quit it first (Ctrl-C in its terminal).")
+        return 1
     load_dotenv(find_dotenv(usecwd=True))  # the repo-root .env holds the LLM key
     if not os.environ.get(cfg.llm.api_key_env):
         print(f"{cfg.llm.api_key_env} is not set; put it in the repo-root .env.")
@@ -115,6 +138,8 @@ def main() -> int:
         app.wrapped_run(host=cfg.robot.host, port=cfg.robot.port)
     except KeyboardInterrupt:
         app.stop()
+    finally:
+        lock.close()
     return 0
 
 
