@@ -91,9 +91,10 @@ by how long it has lasted and how many Nudges it already has.
 - After EVERY Nudge, set a follow-up: `set_hook` with `phone_use.continuing` (or `away.continuing` when the \
 owner is away) and `after_seconds`, usually 30-60, spaced further as the episode drags on. It wakes you \
 again only if the episode is still going. Code keeps one follow-up per episode: a new one replaces the old, \
-and code cancels it when the owner is focused again.
+and code cancels it when the owner is focused again. Never cancel a follow-up yourself.
 - After a strong Nudge was ignored, prefer empathy: `calming1`, ask whether something is up, offer a \
-Pause or an Excuse.
+Pause or an Excuse. The owner can answer you straight away, without the wake phrase, so never tell them \
+what to say.
 - Away Nudges are spoken and few: one or two per episode, never more than {away_cap}. The owner may not \
 even be in the room. After the last one (the state's `away_nudges` shows how many you gave), set no \
 follow-up.
