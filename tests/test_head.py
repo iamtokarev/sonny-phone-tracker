@@ -7,7 +7,9 @@ import time
 
 import pytest
 
+from sonny.attention import Box, Detections
 from sonny.config import load_config
+from sonny.framing import Framing, Reframe
 from sonny.head import HeadOwner
 from tests.fakes import FakeRobot
 
@@ -248,11 +250,11 @@ def test_a_reframe_is_one_yaw_move_from_the_current_framing_yaw(session_head):
     assert (end["measured_yaw"], end["measured_body"]) == (10.0, 10.0)  # read back from the robot after the move
 
 
-def test_a_reframe_stays_within_the_body_range(session_head):
+def test_past_the_body_range_the_body_stops_and_the_head_turns_the_rest(session_head):
     owner, robot, _ = session_head
-    assert owner.reframe(CFG.sweep.body_range_deg + 50)
+    assert owner.reframe(CFG.sweep.body_range_deg + 20)
     framing_done(owner)
-    assert robot.calls[-1][1] == CFG.sweep.body_range_deg == robot.bodies[-1]
+    assert robot.at == (CFG.sweep.body_range_deg + 20, CFG.sweep.body_range_deg)
 
 
 def test_the_session_pose_faces_the_body_where_the_head_looks(session_head):
@@ -369,3 +371,68 @@ def test_an_emotion_move_counts_as_moving(session_head):
     play(owner, "yes1")
     robot.played.wait(2)
     assert owner.moving
+
+
+# ---------------------------------------------------------------- framing in a closed loop (third Sonny check)
+
+
+class FrameClock:
+    def __init__(self) -> None:
+        self.t = 1000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def watch(owner: HeadOwner, robot: FakeRobot, bearing: float, gain: float, seconds: float) -> list[float]:
+    """A fake camera on the head: the owner sits still at a world `bearing` and shows `gain` of the frame width
+    per degree off the head's axis (positive yaw is to the left, so they show left of centre). Framing runs on
+    10 frames a second; returns the yaw of each re-frame the head played."""
+    w = 1280
+    clock = FrameClock()
+    framing, played = Framing(owner.cfg, clock), []
+    wait_until(lambda: not owner.moving)  # the glide to the session pose
+    for _ in range(round(seconds * 10)):
+        clock.t += 0.1
+        x = 0.5 - (bearing - robot.at[0]) * gain
+        person = Box(0.95, x * w - 200, 0, x * w + 200, 720) if 0 < x < 1 else None
+        move = framing.observe(Detections(w, person=person, head_moving=owner.moving))
+        if isinstance(move, Reframe):
+            if owner.reframe(move.yaw_deg):
+                framing_done(owner)
+                played.append(robot.at[0])
+                wait_until(lambda: not owner.moving)
+            else:
+                framing.declined(move)
+    return played
+
+
+@pytest.mark.parametrize("gain", [0.0065, 0.0082, 0.0101])  # 0.0101 is what Sonny's first re-frame showed
+def test_framing_converges_on_the_owner_with_the_body_facing_them(session_head, gain):
+    owner, robot, _ = session_head
+    played = watch(owner, robot, bearing=22.0, gain=gain, seconds=30)
+    head, body = robot.at
+    assert len(played) <= 2  # at 0.0065 they start inside the off-centre band: nothing to do
+    assert abs(head - 22.0) * gain <= CFG.reframe.offcentre and body == head
+
+
+def test_beyond_the_body_range_the_head_turns_the_rest_and_then_holds_still(session_head):
+    """On Sonny a person at ~110° had the body capped at 90° and a no-op re-frame to 90° every 4.5 s."""
+    owner, robot, _ = session_head
+    assert owner.reframe(80.0)  # where a sweep found them, at the frame edge
+    framing_done(owner)
+    played = watch(owner, robot, bearing=110.0, gain=0.0101, seconds=60)
+    head, body = robot.at
+    assert body == CFG.sweep.body_range_deg
+    assert abs(head - 110.0) * 0.0101 <= CFG.reframe.offcentre and head - body <= CFG.sweep.head_range_deg
+    assert len(played) <= 3
+
+
+def test_at_the_far_end_of_the_range_no_reframe_plays_that_would_not_move(session_head):
+    owner, robot, _ = session_head
+    far = CFG.sweep.body_range_deg + CFG.sweep.head_range_deg
+    assert owner.reframe(far + 30)
+    framing_done(owner)
+    assert robot.at == (far, CFG.sweep.body_range_deg)
+    assert not owner.reframe(10.0)  # already there: nothing plays, framing waits for a new hold
+    assert owner.reframe(-10.0)

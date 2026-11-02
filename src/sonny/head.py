@@ -11,7 +11,9 @@ antennas.
   route with their sound; the four antenna gestures are goto sequences here. After every move, failed and
   interrupted ones too, the head returns to its mode's pose.
 - **Framing** (in a Focus Session). The framing pose has the body facing the owner and the head centred on it:
-  head and body at the same yaw. A re-frame is one smooth yaw move of both. The search sweep looks with the
+  head and body at the same yaw, except past `sweep.body_range_deg`, where the body stops and the head turns
+  the rest (up to `sweep.head_range_deg` more). A re-frame is one smooth yaw move of both; one that wouldn't
+  move them (at the end of the range) is declined. The search sweep looks with the
   head alone first, `sweep.head_range_deg` either side of the body; then the body turns out to one end of
   `sweep.body_range_deg` and back across to the other, the head leading at the edge of its range. It steps at
   `sweep.speed_dps` and stops where the vision worker says it saw someone (the re-frame that follows brings the
@@ -228,10 +230,10 @@ class HeadOwner:
                 self._robot.stop_tracking()
                 self._tracking = None
         with self._moving():
-            if mode is Mode.SESSION:  # the body faces where the head looks
-                frame = self._frame_yaw
-                self._robot.goto(frame, self.cfg.frame.pitch_deg, rest, self._c.glide_s, body_yaw_deg=frame)
-                self._body_yaw = frame
+            if mode is Mode.SESSION:  # the body faces where the head looks, as far as it goes
+                frame, body = self._frame_yaw, self._body_for(self._frame_yaw)
+                self._robot.goto(frame, self.cfg.frame.pitch_deg, rest, self._c.glide_s, body_yaw_deg=body)
+                self._body_yaw = body
             else:
                 self._robot.goto(0.0, 0.0, rest, self._c.glide_s)
                 self._body_yaw = 0.0
@@ -384,6 +386,8 @@ class HeadOwner:
     def reframe(self, yaw_deg: float) -> bool:
         """Turn the framing pose by `yaw_deg`, in one smooth move of head and body. False while another move
         plays or outside a session: nothing is queued."""
+        if abs(self._clamp_yaw(self._frame_yaw + yaw_deg) - self._frame_yaw) < 1:  # at the end of the range
+            return False
         if not self._claim_framing("reframe"):
             return False
         self._jobs.put(lambda: self._framing_job(lambda: self._reframe(yaw_deg)))
@@ -430,6 +434,7 @@ class HeadOwner:
     def _reframe(self, yaw_deg: float) -> None:
         r = self.cfg.reframe
         to = self._clamp_yaw(self._frame_yaw + yaw_deg)
+        to_body = self._body_for(to)
         start, came_from, body = self._clock(), self._frame_yaw, self._body_yaw
         self._write(
             "move_start",
@@ -443,9 +448,9 @@ class HeadOwner:
         rest = [-self._c.rest_antenna_rad, self._c.rest_antenna_rad]
         try:
             with self._moving():
-                duration = max(r.min_move_s, max(abs(to - came_from), abs(to - body)) / r.speed_dps)
-                self._robot.goto(to, self.cfg.frame.pitch_deg, rest, duration, body_yaw_deg=to)
-            self._frame_yaw = self._body_yaw = to
+                duration = max(r.min_move_s, max(abs(to - came_from), abs(to_body - body)) / r.speed_dps)
+                self._robot.goto(to, self.cfg.frame.pitch_deg, rest, duration, body_yaw_deg=to_body)
+            self._frame_yaw, self._body_yaw = to, to_body
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
         self._write(
@@ -496,14 +501,15 @@ class HeadOwner:
         )
 
     def _sweep_path(self, home: float) -> list[tuple[float, float]]:
-        """(head yaw, body yaw) waypoints: the head alone either side of the body, which faces `home`; then the
-        body out to the far end of its range with the head leading, the head across to the body's other side,
-        and the body across to the other end."""
+        """(head yaw, body yaw) waypoints: the head alone either side of the body, which faces `home` as far as
+        it goes; then the body out to the far end of its range with the head leading, the head across to the
+        body's other side, and the body across to the other end."""
         h, b = self.cfg.sweep.head_range_deg, self.cfg.sweep.body_range_deg
+        c = self._body_for(home)
         s = 1 if home >= 0 else -1  # the head looks to the nearer end first
         return [
-            (home + s * h, home),
-            (home - s * h, home),
+            (c + s * h, c),
+            (c - s * h, c),
             (-s * (b + h), -s * b),
             (-s * (b - h), -s * b),
             (s * (b + h), s * b),
@@ -522,6 +528,12 @@ class HeadOwner:
         return self._stop.is_set() or self._unframe.is_set() or self._mode is not Mode.SESSION
 
     def _clamp_yaw(self, yaw: float) -> float:
+        """Where the head can look: the body's range plus the head's own."""
+        limit = self.cfg.sweep.body_range_deg + self.cfg.sweep.head_range_deg
+        return max(-limit, min(limit, yaw))
+
+    def _body_for(self, yaw: float) -> float:
+        """Where the body faces for a framing yaw: the same, up to the end of its range."""
         limit = self.cfg.sweep.body_range_deg
         return max(-limit, min(limit, yaw))
 
