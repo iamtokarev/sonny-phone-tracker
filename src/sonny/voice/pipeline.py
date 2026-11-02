@@ -288,6 +288,7 @@ class VoicePipeline:
         self.cfg = cfg
         self.clock = FocusClock(cfg, log, bus)
         self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
+        self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
         conductor = Conductor(self.clock.snapshot)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
         gate = MoveGate(head, cfg.head.move_poll_s)

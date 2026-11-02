@@ -15,7 +15,7 @@ uv run sonny
 
 The LLM runs on OpenRouter: put `OPENROUTER_API_KEY=...` in a `.env` at the repo root (it is
 git-ignored). The first start downloads the voice models from Hugging Face, and exports RF-DETR
-Nano to CoreML in `models/` (about 20 s, in the background; it prints `vision: RF-DETR Nano on
+Nano to CoreML in `models/` (about 20 s, before `ready`; it prints `vision: RF-DETR Nano on
 CoreML on GPU` once loaded).
 
 Start it from a terminal with macOS Local Network permission: uv's Pythons are blocked when

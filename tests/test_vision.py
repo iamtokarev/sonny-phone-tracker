@@ -136,6 +136,32 @@ def rig(tmp_path):
     rig.log.close()
 
 
+# ---------------------------------------------------------------- loading
+
+
+def test_the_detector_loads_before_ready_and_says_on_what(tmp_path, monkeypatch, capsys):
+    rig = Rig(tmp_path)
+    rig.worker.detector = None
+    monkeypatch.setattr("sonny.vision.load_detector", lambda cfg: rig.detector)
+    assert rig.worker.load() is True
+    assert rig.worker.detector is rig.detector
+    assert "vision: RF-DETR Nano on fake" in capsys.readouterr().out
+    rig.log.close()
+
+
+def test_a_detector_that_will_not_load_leaves_sonny_blind_but_running(tmp_path, monkeypatch, capsys):
+    rig = Rig(tmp_path)
+    rig.worker.detector = None
+
+    def broken(cfg):
+        raise RuntimeError("no model")
+
+    monkeypatch.setattr("sonny.vision.load_detector", broken)
+    assert rig.worker.load() is False
+    assert "Sonny can't watch" in capsys.readouterr().out
+    rig.log.close()
+
+
 # ---------------------------------------------------------------- when it watches
 
 
@@ -209,6 +235,21 @@ def test_phone_use_and_back_are_published_and_logged_with_the_episode(rig):
     assert opened["number"] == 1 and opened["kind"] == "phone_use"
     assert closed["number"] == 1 and closed["nudges"] == [] and closed["seconds"] > 0
     assert [r["state"] for r in rig.records("attention")] == ["phone_use", "focused"]
+
+
+def test_attention_events_are_printed_to_the_terminal(rig, capsys):
+    rig.run(2, person())
+    rig.run(9, person(), phone_in_hand=True)
+    rig.run(6, person())
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.startswith("attention:")]
+    assert lines == ["attention: phone_use started", "attention: focused resumed"]
+
+
+def test_an_excused_event_says_so_in_the_terminal(rig, capsys):
+    rig.run(2, person())
+    rig.session.excused = True
+    rig.run(9, person(), phone_in_hand=True)
+    assert "attention: phone_use started (excused)" in capsys.readouterr().out
 
 
 def test_frames_taken_during_a_head_move_are_flagged_and_count_for_nothing(rig):
@@ -300,6 +341,7 @@ def test_a_detection_summary_is_logged_once_a_second(rig):
     assert len(rows) == 2
     quiet, busy = rows
     assert quiet["phone_conf"] is None and quiet["person_conf"] == pytest.approx(0.8)
+    assert quiet["person_x"] == pytest.approx(0.5)  # where the box centre sits: what framing acts on
     assert busy["phone_conf"] == pytest.approx(0.8) and busy["phone_inside"] == pytest.approx(1.0)
     assert busy["phone_motion"] == pytest.approx(15 / W, abs=1e-4)
     assert busy["frames"] == FPS and busy["detected"] == FPS and busy["head_moving"] is False

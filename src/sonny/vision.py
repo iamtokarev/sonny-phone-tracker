@@ -6,10 +6,10 @@ the attention rules and the framing rules of the Focus Session.
   sends nothing and the state holds.
 - **Head moves.** Each frame is flagged when the head owner says the head is moving; such frames count for
   nothing in either rule set. While a sweep runs, the first `person` stops it.
-- **Out.** Attention events go on the bus and in the session log, with the Attention State transitions and each
-  Distraction Episode's open and close. Nothing here decides what wakes the agent (the conductor does). Framing
-  moves go to the head owner, which may decline them while another move plays. Once a second, a detection
-  summary goes to the log: what later tuning of every threshold reads.
+- **Out.** Attention events go on the bus, in the session log and as a terminal line, with the Attention State
+  transitions and each Distraction Episode's open and close. Nothing here decides what wakes the agent (the
+  conductor does). Framing moves go to the head owner, which may decline them while another move plays. Once a
+  second, a detection summary goes to the log: what later tuning of every threshold reads.
 """
 
 import dataclasses
@@ -77,7 +77,7 @@ class VisionWorker:
     ) -> None:
         self.cfg = cfg
         self._frames, self._head, self._session, self._bus, self._log = frames, head, session, bus, log
-        self.detector = detector  # loaded on the worker thread when not given
+        self.detector = detector  # `load()` loads it when not given
         self._clock = clock  # wall time, like the attention rules and `Event.t`
         self._number: int | None = None  # the session the rules below belong to
         self._rules: AttentionRules | None = None
@@ -87,8 +87,20 @@ class VisionWorker:
         self._frame_t = 0.0  # arrival time of the last frame detected
         self._thread: threading.Thread | None = None
 
+    def load(self) -> bool:
+        """Load the detector (exported on the first run), before `ready`. Says whether Sonny can watch."""
+        try:
+            self.detector = load_detector(self.cfg.vision)
+        except Exception as e:
+            print(f"vision: RF-DETR didn't load ({type(e).__name__}: {e}); Sonny can't watch", flush=True)
+            return False
+        print(f"vision: RF-DETR Nano on {self.detector.name}", flush=True)
+        return True
+
     def start(self, stop: threading.Event) -> None:
-        """Load the detector (exported on the first run), then watch until `stop`."""
+        """Watch until `stop`; without a loaded detector there is nothing to watch with."""
+        if self.detector is None:
+            return
         self._thread = threading.Thread(target=self._run, args=(stop,), name="sonny-vision", daemon=True)
         self._thread.start()
 
@@ -97,13 +109,6 @@ class VisionWorker:
             self._thread.join(timeout)
 
     def _run(self, stop: threading.Event) -> None:
-        if self.detector is None:
-            try:
-                self.detector = load_detector(self.cfg.vision)
-            except Exception as e:
-                print(f"vision: RF-DETR didn't load ({type(e).__name__}: {e}); Sonny can't watch", flush=True)
-                return
-            print(f"vision: RF-DETR Nano on {self.detector.name}", flush=True)
         while not stop.is_set():
             try:
                 if not self.step():
@@ -178,6 +183,8 @@ class VisionWorker:
         for event in events:
             self._bus.publish(event)
             (self._log.session or self._log.idle).write_event(event)
+            excused = " (excused)" if event.data.get("excused") else ""
+            print(f"attention: {str(event.type).replace('.', ' ')}{excused}", flush=True)
         if rules.state != state:
             self._write("attention", state=rules.state, was=state)
 
@@ -222,6 +229,7 @@ class _Summary:
             xs, ys = [p.centre[0] for p, _, _ in phones], [p.centre[1] for p, _, _ in phones]
             motion = round(math.hypot(max(xs) - min(xs), max(ys) - min(ys)) / phones[0][2], 4)
         persons = [d.person.conf for d, _ in rows if d.person is not None]
+        xs = [d.person.centre[0] / d.frame_width for d, _ in rows if d.person is not None]
         received, self._received = self._frames.frames - self._received, self._frames.frames
         self._write(
             "detections",
@@ -229,6 +237,7 @@ class _Summary:
             phone_inside=round(best[0].share_inside(best[1]), 3) if best and best[1] else None,
             phone_motion=motion,  # spread of the phone box centre, share of the frame width
             person_conf=round(max(persons), 3) if persons else None,
+            person_x=round(sum(xs) / len(xs), 3) if xs else None,  # mean box centre, share of the frame width
             head_moving=any(d.head_moving for d, _ in rows),
             frames=received,
             detected=len(rows),
