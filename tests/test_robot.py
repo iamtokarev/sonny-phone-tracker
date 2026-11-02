@@ -132,3 +132,20 @@ def test_framing_moves_set_the_body_yaw(daemon):
     head = mini.calls[2][2]["head"]
     assert round(float(np.degrees(np.arctan2(head[1, 0], head[0, 0]))), 3) == -40.0
     assert mini.calls[2][2]["body_yaw"] == pytest.approx(np.radians(-10.0))
+
+
+def test_the_pose_reads_back_the_head_yaw_in_the_world_and_the_body_yaw(daemon):
+    """What the robot reached, beside what was commanded: the log shows a body that stops short."""
+
+    class Posed(SdkMini):
+        def get_current_head_pose(self):
+            from reachy_mini.utils import create_head_pose
+
+            return create_head_pose(yaw=70.0, degrees=True)
+
+        def get_current_joint_positions(self):
+            return [np.radians(40.0), 0, 0, 0, 0, 0, 0], [0.0, 0.0]
+
+    robot = ReachyRobot(Posed(), daemon[2], DATASET)
+    head, body = robot.pose()
+    assert head == pytest.approx(70.0) and body == pytest.approx(40.0)

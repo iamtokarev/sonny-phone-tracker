@@ -244,6 +244,8 @@ def test_a_reframe_is_one_yaw_move_from_the_current_framing_yaw(session_head):
     assert robot.calls[-1][1] == pytest.approx(6.0) and robot.bodies[-1] == pytest.approx(6.0)
     starts = [f for t, f in written if t == "move_start"]
     assert starts[0] == {"name": "reframe", "source": "framing", "yaw_from": 0.0, "yaw_to": 10.0, "body_from": 0.0}
+    end = next(f for t, f in written if t == "move_end")
+    assert (end["measured_yaw"], end["measured_body"]) == (10.0, 10.0)  # read back from the robot after the move
 
 
 def test_a_reframe_stays_within_the_body_range(session_head):
@@ -331,6 +333,7 @@ def test_a_sweep_stops_on_the_first_person_and_the_reframe_brings_the_body_round
     end = written[-1]
     assert end[0] == "move_end" and end[1]["name"] == "sweep" and end[1]["found"] is True
     assert end[1]["yaw"] == round(stop, 1) and end[1]["body"] == 0.0
+    assert end[1]["measured_yaw"] == round(stop, 1) and end[1]["measured_body"] == 0.0
     assert owner.reframe(2.0)
     framing_done(owner)
     assert robot.calls[-1][1] == pytest.approx(stop + 2.0) and robot.bodies[-1] == pytest.approx(stop + 2.0)

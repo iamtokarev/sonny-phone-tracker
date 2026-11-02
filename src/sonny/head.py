@@ -100,6 +100,7 @@ class Robot(Protocol):
         self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, body_yaw_deg: float = 0.0
     ) -> None: ...
     def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None: ...  # at once (the sweep's steps)
+    def pose(self) -> tuple[float, float]: ...  # head yaw (world) and body yaw reached, read back
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None: ...
     def play_emotion(self, name: str) -> str: ...  # the daemon's move uuid
     def move_running(self, uuid: str) -> bool: ...
@@ -447,7 +448,9 @@ class HeadOwner:
             self._frame_yaw = self._body_yaw = to
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
-        self._write("move_end", name="reframe", ok=error is None, error=error, seconds=self._since(start))
+        self._write(
+            "move_end", name="reframe", ok=error is None, error=error, **self._measured(), seconds=self._since(start)
+        )
 
     def _sweep(self) -> None:
         """Along `_sweep_path`, one step per tick, then a glide back to the framing pose it started from. On
@@ -488,6 +491,7 @@ class HeadOwner:
             yaw=round(yaw, 1),
             body=round(body, 1),
             back_to=back_to,
+            **self._measured(),
             seconds=self._since(start),
         )
 
@@ -504,6 +508,14 @@ class HeadOwner:
             (-s * (b - h), -s * b),
             (s * (b + h), s * b),
         ]
+
+    def _measured(self) -> dict:
+        """The head and body yaw the robot reached, for the log beside what was commanded."""
+        try:
+            head, body = self._robot.pose()
+        except Exception:
+            return {"measured_yaw": None, "measured_body": None}
+        return {"measured_yaw": round(head, 1), "measured_body": round(body, 1)}
 
     def _sweep_cut(self) -> bool:
         """Quit, a Pause, or the session is over."""

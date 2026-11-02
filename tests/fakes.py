@@ -94,6 +94,7 @@ class FakeRobot:
         self.played = threading.Event()  # set when an emotion starts playing on the daemon
         self.goto_gate: threading.Event | None = None
         self.bodies: list[float] = []  # per head goto: the body yaw it set
+        self.at = (0.0, 0.0)  # the head and body yaw reached
         self._next = 0
         self._lock = threading.Lock()
 
@@ -124,11 +125,17 @@ class FakeRobot:
     ) -> None:
         self._call("goto", yaw_deg, pitch_deg, antennas)
         self.bodies.append(body_yaw_deg)
+        self.at = (yaw_deg, body_yaw_deg)
         if self.goto_gate is not None:
             self.goto_gate.wait(3)
 
     def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None:
         self._call("aim", yaw_deg, pitch_deg, body_yaw_deg)
+        self.at = (yaw_deg, body_yaw_deg)
+
+    def pose(self) -> tuple[float, float]:
+        """The head and body yaw reached: this fake reaches every target at once."""
+        return self.at
 
     def aims(self) -> list[float]:
         """The head yaw of each sweep step."""
