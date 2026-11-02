@@ -457,7 +457,7 @@ class HeadOwner:
         yaw, body = home, self._body_yaw
         self._write("move_start", name="sweep", source="framing", yaw_from=round(yaw, 1), body_from=round(body, 1))
         step, tick = c.speed_dps / c.step_hz, 1 / c.step_hz
-        found, error = False, None
+        found, error, back_to = False, None, None
         try:
             with self._moving():
                 for to_yaw, to_body in self._sweep_path(home):
@@ -476,6 +476,7 @@ class HeadOwner:
                 self._frame_yaw = yaw
             elif self._mode is Mode.SESSION and not self._stop.is_set():
                 self._settle_pose()  # nobody: back to the last framing pose
+                back_to = round(home, 1)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
         self._write(
@@ -486,6 +487,7 @@ class HeadOwner:
             found=found,
             yaw=round(yaw, 1),
             body=round(body, 1),
+            back_to=back_to,
             seconds=self._since(start),
         )
 

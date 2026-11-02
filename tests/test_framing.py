@@ -137,6 +137,19 @@ def test_after_a_sweep_even_a_centred_person_gets_a_reframe_so_the_body_turns_to
     assert isinstance(move, Reframe) and abs(move.yaw_deg) < 1
 
 
+def test_after_a_sweep_an_unsure_person_is_not_the_owner_back(setup):
+    """A weak box mid-room (conf 0.37-0.5 on Sonny) neither gets framed nor ends the absence: no second sweep."""
+    framing, clock = setup
+    run(framing, clock, 2, person_at(0.5))
+    run(framing, clock, CFG.sweep.after_no_person_s + 0.5, None)
+    run(framing, clock, 5, None, moving=True)  # the sweep found nobody
+    unsure = person_at(0.8, conf=CFG.sweep.found_conf - 0.05)
+    assert run(framing, clock, 30, unsure) == []
+    assert run(framing, clock, 30, None) == []
+    moves = run(framing, clock, 0.1, person_at(0.8))
+    assert moves == [Reframe(pytest.approx(-0.3 / CFG.reframe.gain_per_deg))]
+
+
 def test_a_declined_sweep_is_asked_for_again(setup):
     framing, clock = setup
     run(framing, clock, 2, person_at(0.5))

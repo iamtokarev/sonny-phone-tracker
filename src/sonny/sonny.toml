@@ -106,6 +106,8 @@ after_no_person_s = 10
 speed_dps = 40
 head_range_deg = 55  # the head alone searches this far either side of the body first (the SDK allows 65°)
 body_range_deg = 90  # then the body turns, up to this far either side of straight ahead; framing keeps it here too
+found_conf = 0.7  # a sweep stops on a `person` this sure (the owner reads ~0.95; false finds came at 0.37-0.5)
+found_frames = 3  # ... in this many frames in a row; after a sweep, a less sure person isn't the owner back
 step_hz = 50  # how often a sweep steps the head target
 start_look_s = 1  # at session start, nobody in still frames this long means nobody is in frame: sweep at once
 

@@ -320,13 +320,24 @@ def test_a_sweep_stops_on_the_first_person_seen(rig):
     rig.head.moving = rig.head.sweeping = True
     rig.run(0.5)
     assert rig.head.found == 0
+    rig.run((CFG.sweep.found_frames - 1) / FPS, person(0.95))
+    assert rig.head.found == 0  # one frame can be a false find
     rig.run(1 / FPS, person(0.95))
     assert rig.head.found == 1
 
 
-def test_an_unsure_person_does_not_stop_a_sweep(rig):
+def test_a_person_too_unsure_for_a_find_does_not_stop_a_sweep(rig):
+    """Presence counts from `person.min_conf`; on Sonny, false finds mid-sweep came at 0.37-0.5."""
     rig.head.moving = rig.head.sweeping = True
-    rig.run(1, person(conf=CFG.person.min_conf - 0.1))
+    rig.run(1, person(conf=CFG.sweep.found_conf - 0.05))
+    assert rig.head.found == 0
+
+
+def test_a_find_needs_its_frames_in_a_row(rig):
+    rig.head.moving = rig.head.sweeping = True
+    for _ in range(5):
+        rig.run((CFG.sweep.found_frames - 1) / FPS, person(0.95))
+        rig.run(1 / FPS)
     assert rig.head.found == 0
 
 

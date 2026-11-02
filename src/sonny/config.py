@@ -162,6 +162,8 @@ class Sweep:
     speed_dps: float
     head_range_deg: float
     body_range_deg: float
+    found_conf: float
+    found_frames: int
     step_hz: float
     start_look_s: float
 

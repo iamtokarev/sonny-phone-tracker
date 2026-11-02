@@ -5,7 +5,7 @@ the attention rules and the framing rules of the Focus Session.
   windows freeze), outside a session and after time's up. It runs on each new frame once, so a video freeze
   sends nothing and the state holds.
 - **Head moves.** Each frame is flagged when the head owner says the head is moving; such frames count for
-  nothing in either rule set. While a sweep runs, the first `person` stops it.
+  nothing in either rule set. While a sweep runs, a sure `person` in `sweep.found_frames` frames in a row stops it.
 - **Out.** Attention events go on the bus, in the session log and as a terminal line, with the Attention State
   transitions and each Distraction Episode's open and close. Nothing here decides what wakes the agent (the
   conductor does). Framing moves go to the head owner, which may decline them while another move plays. Once a
@@ -85,6 +85,7 @@ class VisionWorker:
         self._summary: _Summary | None = None
         self._paused = self._excused = self._watching = False
         self._frame_t = 0.0  # arrival time of the last frame detected
+        self._finding = 0  # frames in a row with a person sure enough to stop a sweep
         self._thread: threading.Thread | None = None
 
     def load(self) -> bool:
@@ -137,8 +138,13 @@ class VisionWorker:
         d = dataclasses.replace(self.detector.detect(frame), head_moving=moving)
         detect_ms = (time.perf_counter() - started) * 1000
         self._summary.add(d, detect_ms)
-        if self._head.sweeping and d.person is not None and d.person.conf >= self.cfg.person.min_conf:
-            self._head.sweep_found()
+        sweep = self.cfg.sweep
+        if self._head.sweeping and d.person is not None and d.person.conf >= sweep.found_conf:
+            self._finding += 1
+            if self._finding >= sweep.found_frames:
+                self._head.sweep_found()
+        else:
+            self._finding = 0
         self._apply(lambda rules: rules.observe(d))
         move = self._framing.observe(d)
         if move is not None:

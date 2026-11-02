@@ -315,7 +315,7 @@ def test_a_sweep_searches_with_the_head_first_then_turns_the_body(session_head):
     ]
     assert max(moves) <= step  # a steady speed
     assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST) and robot.bodies[-1] == 10.0
-    assert written[-1][1]["found"] is False
+    assert written[-1][1]["found"] is False and written[-1][1]["back_to"] == 10.0  # the glide back, in the log
 
 
 def test_a_sweep_stops_on_the_first_person_and_the_reframe_brings_the_body_round(session_head):

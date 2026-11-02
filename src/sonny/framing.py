@@ -8,7 +8,8 @@ move to the head owner, which plays it under its one-move-at-a-time rule.
 - **Search sweep.** No `person` for `sweep.after_no_person_s`, or nobody at session start: one sweep. It isn't
   asked for again until someone is seen. The first person seen after a sweep is framed at once, with no hold:
   the sweep stops as they enter the frame edge, past centre, and the head may have found them alone, so even
-  a centred person gets the re-frame that brings the body round to face them.
+  a centred person gets the re-frame that brings the body round to face them. Until then only a person at
+  `sweep.found_conf` counts: a weak box elsewhere in the room neither gets framed nor ends the absence.
 
 Frames taken during a head move (`Detections.head_moving`) count for nothing and restart the hold. The session
 start counts from the first still frame, after the glide to the framing pose.
@@ -51,7 +52,8 @@ class Framing:
         if self._looking_since is None:
             self._looking_since = now
         person = d.person
-        if person is None or person.conf < self.cfg.person.min_conf:
+        floor = self.cfg.sweep.found_conf if self._swept else self.cfg.person.min_conf  # after a sweep: the owner
+        if person is None or person.conf < floor:
             self._off_since = None
             return self._sweep_due(now)
         self._last_person = now
