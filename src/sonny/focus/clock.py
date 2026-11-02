@@ -4,6 +4,11 @@ Excuse expiry and hook timers. The agent never keeps time; it reads the snapshot
 Every bound and default lives here, in code, and comes from config. A call that breaks a bound raises
 `Refused` with the reason the agent gets back. Session time stops during a Pause; Excuses and hooks run on
 session time. `tick()` publishes what fell due since the last tick.
+
+Follow-up hooks (`phone_use.continuing`, `away.continuing`) belong to the open Distraction Episode: at least
+`followup.min_delay_s` out, one per episode (a new one replaces the old), outside the hook cap, cancelled when
+the episode closes, and fired only while it is still open, of their kind and not Excused. The session's
+`NudgeGuard` follows the episode and the Nudges given in it.
 """
 
 import time
@@ -12,9 +17,10 @@ from dataclasses import dataclass, field
 
 from sonny.config import Config
 from sonny.events import EndReason, Event, EventBus, EventType
+from sonny.focus.nudges import FOLLOWUPS, NudgeGuard
 from sonny.session_log import SessionLog
 
-AGENT_HOOKS = (EventType.TIMER, EventType.SESSION_REMAINING)
+AGENT_HOOKS = (EventType.TIMER, EventType.SESSION_REMAINING, *FOLLOWUPS)
 
 
 class Refused(Exception):
@@ -28,6 +34,7 @@ class Hook:
     note: str
     due_s: float | None = None  # session time it fires at (`timer`)
     at_remaining_s: float | None = None  # remaining time it fires at (`session.remaining`)
+    episode: int | None = None  # the Distraction Episode a follow-up belongs to
 
 
 @dataclass
@@ -46,11 +53,26 @@ class Session:
 
 
 class FocusClock:
-    def __init__(self, cfg: Config, log: SessionLog, bus: EventBus, now: Callable[[], float] = time.monotonic):
+    def __init__(
+        self,
+        cfg: Config,
+        log: SessionLog,
+        bus: EventBus,
+        now: Callable[[], float] = time.monotonic,
+        on_nudge: Callable[[int, str], None] = lambda number, intensity: None,
+    ):
         self.cfg = cfg
         self._log, self._bus, self._now = log, bus, now
         self._session: Session | None = None
         self._started = 0
+        self.nudges = NudgeGuard(
+            cfg,
+            now,
+            quiet=lambda: self.excused or self.paused,
+            on_close=self._end_followups,
+            on_nudge=on_nudge,  # the episode's Nudge, for the vision worker's copy of it
+            write=self._write,
+        )
 
     # ---------------------------------------------------------------- state
 
@@ -106,6 +128,7 @@ class FocusClock:
             excuse = {"reason": s.excuse_reason, "minutes_left": round(left, 1)}
         return {
             "session": session,
+            **self.nudges.snapshot(),
             "excuse": excuse,
             "excuses_granted": list(s.excuses),
             "active_hooks": [self._hook_view(h) for h in s.hooks],
@@ -135,6 +158,7 @@ class FocusClock:
                 self._close()  # a new Task in the grace after time's up
         self._log.start_session()
         self._session = Session(task, minutes * 60.0, self._now())
+        self.nudges.reset()
         self._started += 1
         self._emit(Event(EventType.SESSION_STARTED, {"task": task, "duration_min": minutes}))
         return result
@@ -203,9 +227,11 @@ class FocusClock:
         s = self._need_session()
         c = self.cfg.hooks
         if event not in AGENT_HOOKS:
-            raise Refused("event must be timer or session.remaining")
+            raise Refused(f"event must be one of {', '.join(AGENT_HOOKS)}")
         event = EventType(event)
-        if len(s.hooks) >= c.max_active:
+        if event in FOLLOWUPS:
+            return self._set_followup(s, event, note, after_seconds)
+        if sum(h.episode is None for h in s.hooks) >= c.max_active:
             raise Refused(f"at most {c.max_active} hooks can be active; cancel one first")
         hook = Hook(s.next_hook, event, note)
         if event is EventType.TIMER:
@@ -229,6 +255,52 @@ class FocusClock:
         s.next_hook += 1
         self._write("hook_set", **self._hook_view(hook))
         return {"hook_id": hook.id}
+
+    def _set_followup(self, s: Session, event: EventType, note: str, after_seconds: float | None) -> dict:
+        episode, kind = self.nudges.episode, FOLLOWUPS[event]
+        if episode is None:
+            raise Refused("no Distraction Episode is going on: the owner is focused")
+        if episode.kind != kind:
+            other = next(e for e, k in FOLLOWUPS.items() if k == episode.kind)
+            raise Refused(f"the episode is {episode.kind} now; use {other}")
+        if s.excuse_until_s is not None:
+            raise Refused("no follow-ups during an Excuse")
+        if event is EventType.AWAY_CONTINUING and self.nudges.away_capped:
+            cap = self.cfg.away.max_nudges_per_episode
+            raise Refused(f"at most {cap} Away Nudges per episode, and this one has had them")
+        least = self.cfg.followup.min_delay_s
+        if after_seconds is None or after_seconds < least:
+            raise Refused(f"a follow-up needs after_seconds of at least {least:g}")
+        result: dict = {}
+        for old in [h for h in s.hooks if h.episode is not None]:
+            s.hooks.remove(old)
+            self._write("hook_replaced", id=old.id, by=s.next_hook)
+            result["replaced"] = old.id
+        hook = Hook(s.next_hook, event, note, due_s=self._elapsed_s(s) + after_seconds, episode=episode.number)
+        s.hooks.append(hook)
+        s.next_hook += 1
+        self._write("hook_set", **self._hook_view(hook))
+        return {"hook_id": hook.id, **result}
+
+    def _end_followups(self, episode: int) -> None:
+        """The episode closed: its follow-up goes with it."""
+        s = self._session
+        if s is None:
+            return
+        for hook in [h for h in s.hooks if h.episode == episode]:
+            s.hooks.remove(hook)
+            self._write("hook_cancelled", id=hook.id, reason="episode_closed")
+
+    def _followup_stands(self, s: Session, hook: Hook) -> bool:
+        """A due follow-up fires only while its episode is open, of its kind, not Excused, and below the Away cap."""
+        e = self.nudges.episode
+        return (
+            e is not None
+            and e.number == hook.episode
+            and e.kind == FOLLOWUPS[hook.event]
+            and s.excuse_until_s is None
+            and not (hook.event is EventType.AWAY_CONTINUING and self.nudges.away_capped)
+        )
 
     def list_hooks(self) -> dict:
         s = self._session
@@ -265,8 +337,12 @@ class FocusClock:
                 hook.at_remaining_s is not None and remaining <= hook.at_remaining_s
             ):
                 s.hooks.remove(hook)
+                if hook.episode is not None and not self._followup_stands(s, hook):
+                    self._write("hook_expired", id=hook.id, reason="episode_moved_on")
+                    continue
                 self._write("hook_fired", id=hook.id)
-                self._emit(Event(hook.event, {"hook_id": hook.id, "note": hook.note}))
+                data = {"hook_id": hook.id, "note": hook.note}
+                self._emit(Event(hook.event, data if hook.episode is None else {**data, "episode": hook.episode}))
         if s.excuse_until_s is not None and elapsed >= s.excuse_until_s:
             s.excuse_until_s = None
             self._emit(Event(EventType.EXCUSE_EXPIRED, {"reason": s.excuse_reason}))
@@ -284,6 +360,7 @@ class FocusClock:
             self._write("hook_expired", id=hook.id)
         s.hooks.clear()
         s.excuse_until_s = None
+        self.nudges.reset()
         self._bus.publish(Event(EventType.SESSION_ENDED, {"reason": reason}))  # the log writes its own record
         if reason is EndReason.COMPLETED:
             s.time_up_at = self._now()  # the extend grace: the session and its log stay open

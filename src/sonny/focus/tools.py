@@ -5,6 +5,9 @@ agent always learns why. Every call goes to the log with its arguments and resul
 
 A tool that changes the session runs at most once per wake-up: one request is one change. Haiku sometimes
 follows its tool results with the same call again, empty, and `extend({})` would add the default.
+
+The Nudge limits (`NudgeGuard`) hear of every wake-up, move and spoken line here: a `play_emotion` that would
+start a Nudge inside the gap is refused before the head owner is asked.
 """
 
 from collections.abc import Callable
@@ -15,6 +18,7 @@ from pipecat.adapters.llm.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
 
 from sonny.config import Config
+from sonny.events import EventType
 from sonny.focus.clock import AGENT_HOOKS, FocusClock, Refused
 from sonny.head import MOVES
 
@@ -27,7 +31,7 @@ class Head(Protocol):
 
 
 def _schemas(cfg: Config) -> list[FunctionSchema]:
-    s, h = cfg.session, cfg.hooks
+    s, h, f = cfg.session, cfg.hooks, cfg.followup
     return [
         FunctionSchema(
             "start_session",
@@ -63,8 +67,11 @@ def _schemas(cfg: Config) -> list[FunctionSchema]:
             "set_hook",
             "Schedule a wake-up for yourself; `note` comes back to you when it fires. `timer` fires after "
             "`after_seconds` of session time; `session.remaining` fires when `remaining_minutes` are left. "
-            f"At most {h.max_active} active; each must fire at least {h.min_refire_s:g} s out. All hooks "
-            "expire with the session.",
+            f"At most {h.max_active} active; each must fire at least {h.min_refire_s:g} s out. "
+            "`phone_use.continuing` / `away.continuing` is a follow-up on the current Distraction Episode, of "
+            f"its kind: it fires after `after_seconds` (at least {f.min_delay_s:g}) only if the episode is still "
+            "going and not Excused. One per episode: a new one replaces the old; code cancels it when the owner "
+            f"is focused again; it doesn't count toward the {h.max_active}. All hooks expire with the session.",
             {
                 "event": {"type": "string", "enum": [str(e) for e in AGENT_HOOKS]},
                 "note": {"type": "string"},
@@ -106,10 +113,11 @@ class SessionTools:
             "set_hook": clock.set_hook,
             "list_hooks": clock.list_hooks,
             "cancel_hook": clock.cancel_hook,
-            "play_emotion": head.request,
+            "play_emotion": lambda name: self._play_emotion(head, name),
         }
         assert set(self._handlers) == {f.name for f in self.schemas}
         self._done: set[str] = set()  # session-changing tools that ran in this wake-up
+        self._nudges = clock.nudges
 
     @staticmethod
     def _start(clock: FocusClock, head: Head, task: str, duration_minutes: float | None = None) -> dict:
@@ -117,12 +125,26 @@ class SessionTools:
         head.enter_session()
         return clock.start(task, duration_minutes)
 
+    def _play_emotion(self, head: Head, name: str) -> dict:
+        if (reason := self._nudges.move_refusal()) is not None:
+            raise Refused(reason)
+        result = head.request(name)
+        if "playing" in result:
+            self._nudges.moved(result["intensity"])
+        return result
+
     @property
     def names(self) -> list[str]:
         return list(self._handlers)
 
-    def begin_wakeup(self) -> None:
+    def begin_wakeup(self, event: EventType | str) -> None:
+        """A wake-up for `event` starts (`owner.spoke` for an owner turn)."""
         self._done.clear()
+        self._nudges.begin(event)
+
+    def spoke(self) -> None:
+        """Sonny said a line in this wake-up."""
+        self._nudges.spoke()
 
     def call(self, name: str, args: dict[str, Any]) -> dict:
         handler = self._handlers.get(name)
