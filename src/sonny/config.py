@@ -130,6 +130,7 @@ class Vision:
     backend: str
     model_path: str
     threshold: float
+    reload_s: float
     settle_s: float
     summary_every_s: float
 

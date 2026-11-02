@@ -2,6 +2,7 @@
 in the Sonny check; ticket 07 measured them."""
 
 import dataclasses
+import threading
 
 import numpy as np
 import pytest
@@ -49,3 +50,53 @@ def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, capsys, tmp_pa
 def test_an_unknown_backend_is_a_config_error():
     with pytest.raises(ValueError, match=r"vision\.backend"):
         load_detector(dataclasses.replace(CFG.vision, backend="cuda"))
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_the_coreml_model_is_reloaded_in_the_background_before_the_gpu_slows_down():
+    """CoreML on the GPU slows from ~15 to ~39 ms per frame about 30 s after the model loads, when frames come at
+    30 fps; a fresh load is fast again. The reload runs beside detection, which keeps using the old model."""
+    clock, loads, gate = Clock(), [], threading.Event()
+
+    def load():
+        if loads:
+            gate.wait(5)
+        loads.append(object())
+        return loads[-1]
+
+    model = detector.Refreshed(load, every_s=20, clock=clock)
+    first = model.get()
+    clock.t = 19
+    assert model.get() is first and len(loads) == 1
+    clock.t = 21
+    assert model.get() is first  # the reload has started; the old model serves meanwhile
+    assert model.get() is first and len(loads) == 1  # one reload at a time
+    gate.set()
+    model.join(5)
+    assert model.get() is loads[1]
+    clock.t = 40
+    assert model.get() is loads[1]  # 19 s after the reload landed: not due yet
+
+
+def test_a_failed_reload_keeps_the_old_model(capsys):
+    clock, calls = Clock(), []
+
+    def load():
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("disk gone")
+        return "first"
+
+    model = detector.Refreshed(load, every_s=20, clock=clock)
+    clock.t = 21
+    model.get()
+    model.join(5)
+    assert model.get() == "first"
+    assert "reload failed" in capsys.readouterr().out

@@ -82,6 +82,7 @@ max_nudges_per_episode = 2
 backend = "coreml"  # native CoreML on GPU (~18 ms/frame, ticket 07); "mps" is torch MPS fp16 (~26 ms), the fallback
 model_path = "models/rfdetr-nano_fp32.mlpackage"  # exported from RF-DETR Nano on first run; relative to where the app runs
 threshold = 0.3  # boxes below this are dropped; the attention rules apply their own, higher thresholds
+reload_s = 20  # CoreML reloads the model this often: ~30 s after a load the GPU path slows from ~15 to ~39 ms/frame
 settle_s = 0.6  # frames this long after a head move ends still show it (~277 ms command-to-visible lag, ticket 19)
 summary_every_s = 1  # the detection summary in the session log (spec §10)
 
