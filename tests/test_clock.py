@@ -379,3 +379,15 @@ def test_snapshot_in_the_grace_says_time_is_up(rig):
     session = rig.clock.snapshot()["session"]
     assert session["time_up"] is True and session["remaining_min"] == 0
     assert session["can_still_extend"] is True
+
+
+def test_paused_and_excused_say_what_the_vision_worker_watches_through(rig):
+    assert not rig.clock.paused and not rig.clock.excused
+    rig.clock.start("email", 20)
+    rig.clock.pause()
+    assert rig.clock.paused
+    rig.clock.resume()
+    rig.clock.grant_excuse("call", 1)
+    assert rig.clock.excused and not rig.clock.paused
+    rig.advance(MIN)
+    assert not rig.clock.excused

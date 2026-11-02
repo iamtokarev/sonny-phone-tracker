@@ -1,11 +1,15 @@
 """The head owner (spec §3 head by mode, §5): one move at a time, the restore, #1453, and the move log."""
 
 import dataclasses
+import itertools
+import threading
 import time
 
 import pytest
 
+from sonny.attention import Box, Detections
 from sonny.config import load_config
+from sonny.framing import Framing, Reframe
 from sonny.head import HeadOwner
 from tests.fakes import FakeRobot
 
@@ -198,3 +202,237 @@ def test_startup_sets_the_volume_only_when_it_differs():
     owner.start()
     owner.quit()
     assert robot.calls[:2] == [("set_volume", 62), ("wake_up",)]
+
+
+# ---------------------------------------------------------------- re-framing and the search sweep (ticket 28)
+
+FAST_SWEEP = dataclasses.replace(
+    CFG,
+    sweep=dataclasses.replace(CFG.sweep, speed_dps=2400, step_hz=100),  # a full sweep in ~0.2 s
+    vision=dataclasses.replace(CFG.vision, settle_s=0.2),
+)
+REST = [-CFG.head.rest_antenna_rad, CFG.head.rest_antenna_rad]
+
+
+@pytest.fixture
+def session_head():
+    robot = FakeRobot()
+    written: list[tuple[str, dict]] = []
+    owner = HeadOwner(FAST_SWEEP, robot, lambda type, **f: written.append((type, f)))
+    owner.start()
+    owner.enter_session()
+    wait_until(lambda: robot.names()[-1:] == ["goto"])
+    yield owner, robot, written
+    owner.quit()
+
+
+def slow_sweep():
+    """A sweep slow enough to stop midway."""
+    return dataclasses.replace(FAST_SWEEP, sweep=dataclasses.replace(FAST_SWEEP.sweep, speed_dps=200))
+
+
+def framing_done(owner: HeadOwner) -> None:
+    wait_until(lambda: not owner.move_active)
+
+
+def test_a_reframe_is_one_yaw_move_from_the_current_framing_yaw(session_head):
+    owner, robot, written = session_head
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST)
+    assert robot.bodies[-1] == 10.0  # the body turns to face the owner; the head ends centred on it
+    assert owner.reframe(-4.0)
+    framing_done(owner)
+    assert robot.calls[-1][1] == pytest.approx(6.0) and robot.bodies[-1] == pytest.approx(6.0)
+    starts = [f for t, f in written if t == "move_start"]
+    assert starts[0] == {"name": "reframe", "source": "framing", "yaw_from": 0.0, "yaw_to": 10.0, "body_from": 0.0}
+    end = next(f for t, f in written if t == "move_end")
+    assert (end["measured_yaw"], end["measured_body"]) == (10.0, 10.0)  # read back from the robot after the move
+
+
+def test_past_the_body_range_the_body_stops_and_the_head_turns_the_rest(session_head):
+    owner, robot, _ = session_head
+    assert owner.reframe(CFG.sweep.body_range_deg + 20)
+    framing_done(owner)
+    assert robot.at == (CFG.sweep.body_range_deg + 20, CFG.sweep.body_range_deg)
+
+
+def test_the_session_pose_faces_the_body_where_the_head_looks(session_head):
+    owner, robot, _ = session_head
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    owner.settle(session_running=True, listening=False)
+    play(owner, "yes1")
+    robot.played.wait(2)
+    robot.finish()
+    framing_done(owner)
+    wait_until(lambda: robot.calls[-1][0] == "goto")
+    assert robot.calls[-1][1] == 10.0 and robot.bodies[-1] == 10.0
+
+
+def test_framing_waits_for_the_glide_to_the_session_pose_and_an_emotion_move(session_head):
+    owner, robot, _ = session_head
+    play(owner, "yes1")
+    robot.played.wait(2)
+    assert not owner.reframe(10.0) and not owner.sweep()
+    robot.finish()
+    framing_done(owner)
+    assert owner.reframe(10.0)
+
+
+def test_an_emotion_move_is_busy_while_a_reframe_plays(session_head):
+    owner, robot, _ = session_head
+    robot.goto_gate = threading.Event()
+    assert owner.reframe(10.0)
+    wait_until(lambda: robot.calls[-1][:2] == ("goto", 10.0))
+    assert "busy" in owner.request("yes1")
+    robot.goto_gate.set()
+    framing_done(owner)
+    assert "playing" in owner.request("yes1")
+
+
+def test_no_framing_outside_a_session():
+    robot = FakeRobot()
+    owner = HeadOwner(FAST_SWEEP, robot, lambda *a, **k: None)
+    owner.start()
+    assert not owner.reframe(10.0) and not owner.sweep()
+    owner.quit()
+
+
+def test_a_sweep_searches_with_the_head_first_then_turns_the_body(session_head):
+    owner, robot, written = session_head
+    c = CFG.sweep
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    assert owner.sweep()
+    framing_done(owner)
+    heads, bodies = robot.aims(), robot.aim_bodies()
+    first_turn = next(i for i, b in enumerate(bodies) if b != 10.0)
+    assert {round(h - 10.0) for h in heads[:first_turn]} >= {round(c.head_range_deg), -round(c.head_range_deg)}
+    assert all(abs(h - b) <= c.head_range_deg + 1e-9 for h, b in zip(heads, bodies, strict=True))
+    assert max(bodies) == pytest.approx(c.body_range_deg) and min(bodies) == pytest.approx(-c.body_range_deg)
+    assert max(heads) == pytest.approx(c.body_range_deg + c.head_range_deg)
+    assert min(heads) == pytest.approx(-c.body_range_deg - c.head_range_deg)
+    step = FAST_SWEEP.sweep.speed_dps / FAST_SWEEP.sweep.step_hz + 1e-9
+    moves = [
+        max(abs(h2 - h1), abs(b2 - b1)) for (h1, b1), (h2, b2) in itertools.pairwise(zip(heads, bodies, strict=True))
+    ]
+    assert max(moves) <= step  # a steady speed
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST) and robot.bodies[-1] == 10.0
+    assert written[-1][1]["found"] is False and written[-1][1]["back_to"] == 10.0  # the glide back, in the log
+
+
+def test_a_sweep_stops_on_the_first_person_and_the_reframe_brings_the_body_round(session_head):
+    owner, robot, written = session_head
+    owner.cfg = slow_sweep()
+    assert owner.sweep()
+    wait_until(lambda: len(robot.aims()) >= 5)
+    owner.sweep_found()
+    framing_done(owner)
+    stop, body = robot.aims()[-1], robot.aim_bodies()[-1]
+    assert 0 < abs(stop) <= CFG.sweep.head_range_deg and body == 0.0  # found by the head alone
+    assert robot.names()[-1] == "aim"  # it stays where it found someone
+    end = written[-1]
+    assert end[0] == "move_end" and end[1]["name"] == "sweep" and end[1]["found"] is True
+    assert end[1]["yaw"] == round(stop, 1) and end[1]["body"] == 0.0
+    assert end[1]["measured_yaw"] == round(stop, 1) and end[1]["measured_body"] == 0.0
+    assert owner.reframe(2.0)
+    framing_done(owner)
+    assert robot.calls[-1][1] == pytest.approx(stop + 2.0) and robot.bodies[-1] == pytest.approx(stop + 2.0)
+
+
+def test_stopping_framing_ends_a_sweep_at_the_framing_pose(session_head):
+    owner, robot, _ = session_head
+    owner.cfg = slow_sweep()
+    assert owner.sweep()
+    wait_until(lambda: len(robot.aims()) >= 3)
+    owner.stop_framing()  # a Pause
+    framing_done(owner)
+    assert robot.calls[-1] == ("goto", 0.0, CFG.frame.pitch_deg, REST)
+
+
+def test_the_head_counts_as_moving_through_a_move_and_a_little_after(session_head):
+    owner, robot, _ = session_head
+    time.sleep(FAST_SWEEP.vision.settle_s + 0.05)
+    assert not owner.moving
+    robot.goto_gate = threading.Event()
+    owner.reframe(10.0)
+    wait_until(lambda: robot.calls[-1][:2] == ("goto", 10.0))
+    assert owner.moving
+    robot.goto_gate.set()
+    framing_done(owner)
+    assert owner.moving  # its last frames still show the motion
+    time.sleep(FAST_SWEEP.vision.settle_s + 0.05)
+    assert not owner.moving
+
+
+def test_an_emotion_move_counts_as_moving(session_head):
+    owner, robot, _ = session_head
+    play(owner, "yes1")
+    robot.played.wait(2)
+    assert owner.moving
+
+
+# ---------------------------------------------------------------- framing in a closed loop (third Sonny check)
+
+
+class FrameClock:
+    def __init__(self) -> None:
+        self.t = 1000.0
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def watch(owner: HeadOwner, robot: FakeRobot, bearing: float, gain: float, seconds: float) -> list[float]:
+    """A fake camera on the head: the owner sits still at a world `bearing` and shows `gain` of the frame width
+    per degree off the head's axis (positive yaw is to the left, so they show left of centre). Framing runs on
+    10 frames a second; returns the yaw of each re-frame the head played."""
+    w = 1280
+    clock = FrameClock()
+    framing, played = Framing(owner.cfg, clock), []
+    wait_until(lambda: not owner.moving)  # the glide to the session pose
+    for _ in range(round(seconds * 10)):
+        clock.t += 0.1
+        x = 0.5 - (bearing - robot.at[0]) * gain
+        person = Box(0.95, x * w - 200, 0, x * w + 200, 720) if 0 < x < 1 else None
+        move = framing.observe(Detections(w, person=person, head_moving=owner.moving))
+        if isinstance(move, Reframe):
+            if owner.reframe(move.yaw_deg):
+                framing_done(owner)
+                played.append(robot.at[0])
+                wait_until(lambda: not owner.moving)
+            else:
+                framing.declined(move)
+    return played
+
+
+@pytest.mark.parametrize("gain", [0.0065, 0.0082, 0.0101])  # 0.0101 is what Sonny's first re-frame showed
+def test_framing_converges_on_the_owner_with_the_body_facing_them(session_head, gain):
+    owner, robot, _ = session_head
+    played = watch(owner, robot, bearing=22.0, gain=gain, seconds=30)
+    head, body = robot.at
+    assert len(played) <= 2  # at 0.0065 they start inside the off-centre band: nothing to do
+    assert abs(head - 22.0) * gain <= CFG.reframe.offcentre and body == head
+
+
+def test_beyond_the_body_range_the_head_turns_the_rest_and_then_holds_still(session_head):
+    """On Sonny a person at ~110° had the body capped at 90° and a no-op re-frame to 90° every 4.5 s."""
+    owner, robot, _ = session_head
+    assert owner.reframe(80.0)  # where a sweep found them, at the frame edge
+    framing_done(owner)
+    played = watch(owner, robot, bearing=110.0, gain=0.0101, seconds=60)
+    head, body = robot.at
+    assert body == CFG.sweep.body_range_deg
+    assert abs(head - 110.0) * 0.0101 <= CFG.reframe.offcentre and head - body <= CFG.sweep.head_range_deg
+    assert len(played) <= 3
+
+
+def test_at_the_far_end_of_the_range_no_reframe_plays_that_would_not_move(session_head):
+    owner, robot, _ = session_head
+    far = CFG.sweep.body_range_deg + CFG.sweep.head_range_deg
+    assert owner.reframe(far + 30)
+    framing_done(owner)
+    assert robot.at == (far, CFG.sweep.body_range_deg)
+    assert not owner.reframe(10.0)  # already there: nothing plays, framing waits for a new hold
+    assert owner.reframe(-10.0)

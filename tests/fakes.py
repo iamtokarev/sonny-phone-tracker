@@ -83,7 +83,7 @@ class FakeRobot:
     """Stands in for Sonny's head at the head owner's seam: the SDK calls and the daemon REST routes.
 
     A recorded emotion runs until `finish()`; `fail_play` makes the REST play raise; `motors` is what the
-    daemon reports."""
+    daemon reports. While `goto_gate` is set to an unset Event, a head goto blocks until it is set."""
 
     def __init__(self) -> None:
         self.calls: list[tuple] = []
@@ -92,6 +92,9 @@ class FakeRobot:
         self.fail_play: Exception | None = None
         self.vol = 62
         self.played = threading.Event()  # set when an emotion starts playing on the daemon
+        self.goto_gate: threading.Event | None = None
+        self.bodies: list[float] = []  # per head goto: the body yaw it set
+        self.at = (0.0, 0.0)  # the head and body yaw reached
         self._next = 0
         self._lock = threading.Lock()
 
@@ -117,8 +120,30 @@ class FakeRobot:
     def stop_tracking(self) -> None:
         self._call("stop_tracking")
 
-    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None:
+    def goto(
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, body_yaw_deg: float = 0.0
+    ) -> None:
         self._call("goto", yaw_deg, pitch_deg, antennas)
+        self.bodies.append(body_yaw_deg)
+        self.at = (yaw_deg, body_yaw_deg)
+        if self.goto_gate is not None:
+            self.goto_gate.wait(3)
+
+    def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None:
+        self._call("aim", yaw_deg, pitch_deg, body_yaw_deg)
+        self.at = (yaw_deg, body_yaw_deg)
+
+    def pose(self) -> tuple[float, float]:
+        """The head and body yaw reached: this fake reaches every target at once."""
+        return self.at
+
+    def aims(self) -> list[float]:
+        """The head yaw of each sweep step."""
+        return [c[1] for c in self.calls if c[0] == "aim"]
+
+    def aim_bodies(self) -> list[float]:
+        """The body yaw of each sweep step."""
+        return [c[3] for c in self.calls if c[0] == "aim"]
 
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
         self._call("goto_antennas", antennas)

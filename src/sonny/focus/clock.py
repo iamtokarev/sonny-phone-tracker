@@ -64,6 +64,16 @@ class FocusClock:
         """A session is open and its time isn't up (the grace after time's up doesn't count)."""
         return self._session is not None and self._session.time_up_at is None
 
+    @property
+    def paused(self) -> bool:
+        s = self._session  # read once: other threads read these while the conductor ticks
+        return s is not None and s.paused_since is not None
+
+    @property
+    def excused(self) -> bool:
+        s = self._session
+        return s is not None and s.excuse_until_s is not None
+
     def _elapsed_s(self, s: Session) -> float:
         until = s.paused_since if s.paused_since is not None else self._now()
         return min(s.duration_s, until - s.started - s.paused_total_s)

@@ -126,6 +126,16 @@ class Away:
 
 
 @dataclass(frozen=True)
+class Vision:
+    backend: str
+    model_path: str
+    threshold: float
+    reload_s: float
+    settle_s: float
+    summary_every_s: float
+
+
+@dataclass(frozen=True)
 class Blind:
     freeze_s: float
     reconnect_every_s: float
@@ -142,13 +152,20 @@ class Reframe:
     offcentre: float
     hold_s: float
     gain_per_deg: float
+    speed_dps: float
+    min_move_s: float
 
 
 @dataclass(frozen=True)
 class Sweep:
     after_no_person_s: float
     speed_dps: float
-    yaw_range: str
+    head_range_deg: float
+    body_range_deg: float
+    found_conf: float
+    found_frames: int
+    step_hz: float
+    start_look_s: float
 
 
 @dataclass(frozen=True)
@@ -223,6 +240,7 @@ class Config:
     phone_use: PhoneUse
     window: Window
     away: Away
+    vision: Vision
     blind: Blind
     frame: Frame
     reframe: Reframe

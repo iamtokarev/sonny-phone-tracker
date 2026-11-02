@@ -118,3 +118,34 @@ def test_poses_and_tracking_go_through_the_sdk(daemon):
     pitch = np.degrees(-np.arcsin(pose_kw["head"][2, 0]))
     assert round(float(pitch), 3) == 5.0 and pose_kw["antennas"] == [-0.17, 0.17] and pose_kw["duration"] == 1.0
     assert mini.calls[3][2] == {"antennas": [0.0, 0.7], "duration": 0.15, "body_yaw": None}
+
+
+def test_framing_moves_set_the_body_yaw(daemon):
+    """The head yaw is in the world frame; the body is told where to face, so the head ends centred on it."""
+    mini = SdkMini()
+    robot = ReachyRobot(mini, daemon[2], DATASET)
+    robot.goto(25.0, 0.0, [-0.17, 0.17], 1.0, body_yaw_deg=25.0)
+    robot.goto(0.0, 0.0, [-0.17, 0.17], 1.0)
+    robot.aim(-40.0, 0.0, body_yaw_deg=-10.0)
+    assert [c[0] for c in mini.calls] == ["goto_target", "goto_target", "set_target"]
+    assert mini.calls[0][2]["body_yaw"] == pytest.approx(np.radians(25.0)) and mini.calls[1][2]["body_yaw"] == 0.0
+    head = mini.calls[2][2]["head"]
+    assert round(float(np.degrees(np.arctan2(head[1, 0], head[0, 0]))), 3) == -40.0
+    assert mini.calls[2][2]["body_yaw"] == pytest.approx(np.radians(-10.0))
+
+
+def test_the_pose_reads_back_the_head_yaw_in_the_world_and_the_body_yaw(daemon):
+    """What the robot reached, beside what was commanded: the log shows a body that stops short."""
+
+    class Posed(SdkMini):
+        def get_current_head_pose(self):
+            from reachy_mini.utils import create_head_pose
+
+            return create_head_pose(yaw=70.0, degrees=True)
+
+        def get_current_joint_positions(self):
+            return [np.radians(40.0), 0, 0, 0, 0, 0, 0], [0.0, 0.0]
+
+    robot = ReachyRobot(Posed(), daemon[2], DATASET)
+    head, body = robot.pose()
+    assert head == pytest.approx(70.0) and body == pytest.approx(40.0)

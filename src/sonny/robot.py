@@ -3,6 +3,7 @@ moves, motor state and volume through the daemon REST routes (spec §5: emotions
 their bundled sound, so nothing streams over Wi-Fi at 100 Hz).
 """
 
+import math
 from typing import Any, Protocol
 from urllib.parse import quote
 
@@ -34,10 +35,24 @@ class ReachyRobot:
     def stop_tracking(self) -> None:
         self._mini.stop_head_tracking()
 
-    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None:
-        """Blocks until the pose is reached."""
+    def goto(
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, body_yaw_deg: float = 0.0
+    ) -> None:
+        """Blocks until the pose is reached. The head yaw is in the world frame; the body turns to `body_yaw_deg`
+        (straight ahead by default), so the head ends `yaw_deg - body_yaw_deg` off the body's front."""
         head = create_head_pose(pitch=pitch_deg, yaw=yaw_deg, degrees=True)
-        self._mini.goto_target(head=head, antennas=antennas, duration=duration_s)
+        self._mini.goto_target(head=head, antennas=antennas, duration=duration_s, body_yaw=math.radians(body_yaw_deg))
+
+    def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None:
+        """A head and body target, at once (the sweep's steps)."""
+        head = create_head_pose(pitch=pitch_deg, yaw=yaw_deg, degrees=True)
+        self._mini.set_target(head=head, body_yaw=math.radians(body_yaw_deg))
+
+    def pose(self) -> tuple[float, float]:
+        """The head yaw in the world and the body yaw reached, in degrees, read back from the robot."""
+        head = self._mini.get_current_head_pose()
+        body = self._mini.get_current_joint_positions()[0][0]
+        return math.degrees(math.atan2(head[1][0], head[0][0])), math.degrees(body)
 
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
         self._mini.goto_target(antennas=antennas, duration=duration_s, body_yaw=None)

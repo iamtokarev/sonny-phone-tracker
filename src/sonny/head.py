@@ -1,5 +1,5 @@
 """The head owner (spec §3 "Head" column, §5): the only code that tracks, moves or poses Sonny's head and
-antennas. Re-framing and the search sweep come with ticket 28.
+antennas.
 
 - **Head by mode.** Idle: tracking stopped, still at neutral. Idle conversation: daemon face tracking at
   `head.tracking_weight`, back to neutral once Sonny stops listening. Focus Session: tracking stopped before
@@ -10,6 +10,18 @@ antennas. Re-framing and the search sweep come with ticket 28.
   queued; with the motors down it returns `unavailable`. Recorded emotions play through the daemon REST
   route with their sound; the four antenna gestures are goto sequences here. After every move, failed and
   interrupted ones too, the head returns to its mode's pose.
+- **Framing** (in a Focus Session). The framing pose has the body facing the owner and the head centred on it:
+  head and body at the same yaw, except past `sweep.body_range_deg`, where the body stops and the head turns
+  the rest (up to `sweep.head_range_deg` more). A re-frame is one smooth yaw move of both; one that wouldn't
+  move them (at the end of the range) is declined. The search sweep looks with the
+  head alone first, `sweep.head_range_deg` either side of the body; then the body turns out to one end of
+  `sweep.body_range_deg` and back across to the other, the head leading at the edge of its range. It steps at
+  `sweep.speed_dps` and stops where the vision worker says it saw someone (the re-frame that follows brings the
+  body round), or returns to the framing pose. Both are head moves like any other: they start only when no
+  move is playing and make `play_emotion` busy. Unlike emotion moves they are silent and may overlap speech.
+  `framing.Framing` decides when; this module plays them.
+- **Moving.** The head counts as moving through every head move and glide, and for `vision.settle_s` after:
+  frames taken then show the motion, so the vision worker leaves them out.
 - **Call order.** A granted move doesn't start at once: its cue comes down the frame stream after any line
   the agent said before calling it (`MoveGate`), and it waits for that line to be spoken. A line that comes
   after the cue waits for the move (`move_cued`).
@@ -18,10 +30,12 @@ All robot calls run on one worker thread, in order, except `enter_session`'s tra
 happen before the session starts. Every move writes `move_start` and `move_end` to the log.
 """
 
+import math
 import queue
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -84,7 +98,11 @@ class Robot(Protocol):
     def sleep(self) -> None: ...
     def start_tracking(self, weight: float) -> None: ...
     def stop_tracking(self) -> None: ...
-    def goto(self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float) -> None: ...
+    def goto(
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, body_yaw_deg: float = 0.0
+    ) -> None: ...
+    def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None: ...  # at once (the sweep's steps)
+    def pose(self) -> tuple[float, float]: ...  # head yaw (world) and body yaw reached, read back
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None: ...
     def play_emotion(self, name: str) -> str: ...  # the daemon's move uuid
     def move_running(self, uuid: str) -> bool: ...
@@ -112,6 +130,13 @@ class HeadOwner:
         self._reserved: tuple[str, float] | None = None  # a granted move waiting for its cue, and since when
         self._queued: str | None = None  # a cued move waiting for the line before it
         self._playing: str | None = None
+        self._framing: str | None = None  # a re-frame or sweep that hasn't finished
+        self._frame_yaw = 0.0  # the framing pose's yaw in this session: where the head looks and the body faces
+        self._body_yaw = 0.0  # where the body faces now; off the framing yaw only after a sweep found someone
+        self._found = threading.Event()  # the sweep running now saw someone
+        self._unframe = threading.Event()  # a running sweep stops and goes back to the framing pose
+        self._motion = 0  # head moves and glides running now
+        self._still_since = -float("inf")  # when the last one ended
         self._lock = threading.Lock()  # move state
         self._robot_lock = threading.RLock()  # tracking changes from the worker and from `enter_session`
         self._jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
@@ -175,6 +200,8 @@ class HeadOwner:
             self._zero_tracking()
             self._robot.stop_tracking()
             self._tracking = None
+            if self._mode is not Mode.SESSION:
+                self._frame_yaw = self._body_yaw = 0.0
             self._mode = Mode.SESSION  # under the lock: a settle on the worker can't turn tracking back on
         self._jobs.put(self._settle_job)
 
@@ -202,10 +229,14 @@ class HeadOwner:
             if self._zero_tracking() and mode is not Mode.CONVERSATION:
                 self._robot.stop_tracking()
                 self._tracking = None
-        if mode is Mode.SESSION:
-            self._robot.goto(0.0, self.cfg.frame.pitch_deg, rest, self._c.glide_s)
-        else:
-            self._robot.goto(0.0, 0.0, rest, self._c.glide_s)
+        with self._moving():
+            if mode is Mode.SESSION:  # the body faces where the head looks, as far as it goes
+                frame, body = self._frame_yaw, self._body_for(self._frame_yaw)
+                self._robot.goto(frame, self.cfg.frame.pitch_deg, rest, self._c.glide_s, body_yaw_deg=body)
+                self._body_yaw = body
+            else:
+                self._robot.goto(0.0, 0.0, rest, self._c.glide_s)
+                self._body_yaw = 0.0
         with self._robot_lock:
             if mode is Mode.CONVERSATION and self._mode is Mode.CONVERSATION:  # not left meanwhile
                 self._robot.start_tracking(self._c.tracking_weight)
@@ -234,9 +265,27 @@ class HeadOwner:
         with self._lock:
             return self._queued is not None or self._playing is not None
 
+    @property
+    def moving(self) -> bool:
+        """The head is moving, or stopped less than `vision.settle_s` ago: a frame taken now may show the motion."""
+        with self._lock:
+            return self._motion > 0 or self._clock() - self._still_since < self.cfg.vision.settle_s
+
+    @contextmanager
+    def _moving(self) -> Iterator[None]:
+        with self._lock:
+            self._motion += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._motion -= 1
+                self._still_since = self._clock()
+
     def _move_active_locked(self) -> bool:
         granted = self._reserved is not None and self._clock() - self._reserved[1] <= self._c.cue_timeout_s
-        return granted or self._queued is not None or self._playing is not None  # a stale grant's cue never came
+        busy = self._queued is not None or self._playing is not None or self._framing is not None
+        return granted or busy  # a stale grant's cue never came
 
     def request(self, name: str) -> dict:
         """`play_emotion`: grant the move, or say why not. A granted move plays once its cue arrives."""
@@ -289,12 +338,13 @@ class HeadOwner:
         self._write("move_start", name=name, intensity=MOVES[name].intensity, source=source)
         error: str | None = None
         try:
-            with self._robot_lock:
+            with self._moving(), self._robot_lock:
                 self._zero_tracking()
-            if name in GESTURES:
-                self._gesture(GESTURES[name])
-            else:
-                self._emotion(name)
+            with self._moving():
+                if name in GESTURES:
+                    self._gesture(GESTURES[name])
+                else:
+                    self._emotion(name)
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
         finally:
@@ -330,6 +380,165 @@ class HeadOwner:
                 if not self._stop.is_set():
                     raise TimeoutError(f"still running after {self._c.move_timeout_s:g} s")
                 return
+
+    # ---------------------------------------------------------------- framing
+
+    def reframe(self, yaw_deg: float) -> bool:
+        """Turn the framing pose by `yaw_deg`, in one smooth move of head and body. False while another move
+        plays or outside a session: nothing is queued."""
+        if abs(self._clamp_yaw(self._frame_yaw + yaw_deg) - self._frame_yaw) < 1:  # at the end of the range
+            return False
+        if not self._claim_framing("reframe"):
+            return False
+        self._jobs.put(lambda: self._framing_job(lambda: self._reframe(yaw_deg)))
+        return True
+
+    def sweep(self) -> bool:
+        """One search sweep. False while another move plays or outside a session: nothing is queued."""
+        if not self._claim_framing("sweep"):
+            return False
+        self._found.clear()
+        self._unframe.clear()
+        self._jobs.put(lambda: self._framing_job(self._sweep))
+        return True
+
+    @property
+    def sweeping(self) -> bool:
+        with self._lock:
+            return self._framing == "sweep"
+
+    def sweep_found(self) -> None:
+        """The vision worker saw someone: a running sweep stops where it is, and the head's yaw there is the
+        framing yaw. The body may still face elsewhere until the next re-frame."""
+        self._found.set()
+
+    def stop_framing(self) -> None:
+        """A Pause: a running sweep goes back to the framing pose, and the head holds still."""
+        self._unframe.set()
+
+    def _claim_framing(self, name: str) -> bool:
+        with self._lock:
+            if self._mode is not Mode.SESSION or self._move_active_locked():
+                return False
+            self._framing = name
+            return True
+
+    def _framing_job(self, move: Callable[[], None]) -> None:
+        try:
+            if self._mode is Mode.SESSION and not self._stop.is_set():  # not left while it waited
+                move()
+        finally:
+            with self._lock:
+                self._framing = None
+
+    def _reframe(self, yaw_deg: float) -> None:
+        r = self.cfg.reframe
+        to = self._clamp_yaw(self._frame_yaw + yaw_deg)
+        to_body = self._body_for(to)
+        start, came_from, body = self._clock(), self._frame_yaw, self._body_yaw
+        self._write(
+            "move_start",
+            name="reframe",
+            source="framing",
+            yaw_from=round(came_from, 1),
+            yaw_to=round(to, 1),
+            body_from=round(body, 1),
+        )
+        error: str | None = None
+        rest = [-self._c.rest_antenna_rad, self._c.rest_antenna_rad]
+        try:
+            with self._moving():
+                duration = max(r.min_move_s, max(abs(to - came_from), abs(to_body - body)) / r.speed_dps)
+                self._robot.goto(to, self.cfg.frame.pitch_deg, rest, duration, body_yaw_deg=to_body)
+            self._frame_yaw, self._body_yaw = to, to_body
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+        self._write(
+            "move_end", name="reframe", ok=error is None, error=error, **self._measured(), seconds=self._since(start)
+        )
+
+    def _sweep(self) -> None:
+        """Along `_sweep_path`, one step per tick, then a glide back to the framing pose it started from. On
+        `sweep_found` it stops where it is."""
+        c = self.cfg.sweep
+        start, home = self._clock(), self._frame_yaw
+        yaw, body = home, self._body_yaw
+        self._write("move_start", name="sweep", source="framing", yaw_from=round(yaw, 1), body_from=round(body, 1))
+        step, tick = c.speed_dps / c.step_hz, 1 / c.step_hz
+        found, error, back_to = False, None, None
+        try:
+            with self._moving():
+                for to_yaw, to_body in self._sweep_path(home):
+                    from_yaw, from_body = yaw, body
+                    n = math.ceil(max(abs(to_yaw - from_yaw), abs(to_body - from_body)) / step)
+                    for i in range(1, n + 1):
+                        if found or self._sweep_cut():
+                            break
+                        yaw = from_yaw + (to_yaw - from_yaw) * i / n
+                        body = from_body + (to_body - from_body) * i / n
+                        self._robot.aim(yaw, self.cfg.frame.pitch_deg, body)
+                        self._body_yaw = body
+                        self._stop.wait(tick)
+                        found = self._found.is_set()
+            if found:
+                self._frame_yaw = yaw
+            elif self._mode is Mode.SESSION and not self._stop.is_set():
+                self._settle_pose()  # nobody: back to the last framing pose
+                back_to = round(home, 1)
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+        self._write(
+            "move_end",
+            name="sweep",
+            ok=error is None,
+            error=error,
+            found=found,
+            yaw=round(yaw, 1),
+            body=round(body, 1),
+            back_to=back_to,
+            **self._measured(),
+            seconds=self._since(start),
+        )
+
+    def _sweep_path(self, home: float) -> list[tuple[float, float]]:
+        """(head yaw, body yaw) waypoints: the head alone either side of the body, which faces `home` as far as
+        it goes; then the body out to the far end of its range with the head leading, the head across to the
+        body's other side, and the body across to the other end."""
+        h, b = self.cfg.sweep.head_range_deg, self.cfg.sweep.body_range_deg
+        c = self._body_for(home)
+        s = 1 if home >= 0 else -1  # the head looks to the nearer end first
+        return [
+            (c + s * h, c),
+            (c - s * h, c),
+            (-s * (b + h), -s * b),
+            (-s * (b - h), -s * b),
+            (s * (b + h), s * b),
+        ]
+
+    def _measured(self) -> dict:
+        """The head and body yaw the robot reached, for the log beside what was commanded."""
+        try:
+            head, body = self._robot.pose()
+        except Exception:
+            return {"measured_yaw": None, "measured_body": None}
+        return {"measured_yaw": round(head, 1), "measured_body": round(body, 1)}
+
+    def _sweep_cut(self) -> bool:
+        """Quit, a Pause, or the session is over."""
+        return self._stop.is_set() or self._unframe.is_set() or self._mode is not Mode.SESSION
+
+    def _clamp_yaw(self, yaw: float) -> float:
+        """Where the head can look: the body's range plus the head's own."""
+        limit = self.cfg.sweep.body_range_deg + self.cfg.sweep.head_range_deg
+        return max(-limit, min(limit, yaw))
+
+    def _body_for(self, yaw: float) -> float:
+        """Where the body faces for a framing yaw: the same, up to the end of its range."""
+        limit = self.cfg.sweep.body_range_deg
+        return max(-limit, min(limit, yaw))
+
+    def _since(self, start: float) -> float:
+        return round(self._clock() - start, 2)
 
     def _motors_up(self) -> bool:
         try:
