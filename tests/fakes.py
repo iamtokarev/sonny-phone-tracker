@@ -93,7 +93,7 @@ class FakeRobot:
         self.vol = 62
         self.played = threading.Event()  # set when an emotion starts playing on the daemon
         self.goto_gate: threading.Event | None = None
-        self.free_body: list[bool] = []  # per head goto: whether the body was left to turn along
+        self.bodies: list[float] = []  # per head goto: the body yaw it set
         self._next = 0
         self._lock = threading.Lock()
 
@@ -120,18 +120,23 @@ class FakeRobot:
         self._call("stop_tracking")
 
     def goto(
-        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, free_body: bool = False
+        self, yaw_deg: float, pitch_deg: float, antennas: list[float], duration_s: float, body_yaw_deg: float = 0.0
     ) -> None:
         self._call("goto", yaw_deg, pitch_deg, antennas)
-        self.free_body.append(free_body)
+        self.bodies.append(body_yaw_deg)
         if self.goto_gate is not None:
             self.goto_gate.wait(3)
 
-    def aim(self, yaw_deg: float, pitch_deg: float) -> None:
-        self._call("aim", yaw_deg, pitch_deg)
+    def aim(self, yaw_deg: float, pitch_deg: float, body_yaw_deg: float) -> None:
+        self._call("aim", yaw_deg, pitch_deg, body_yaw_deg)
 
     def aims(self) -> list[float]:
+        """The head yaw of each sweep step."""
         return [c[1] for c in self.calls if c[0] == "aim"]
+
+    def aim_bodies(self) -> list[float]:
+        """The body yaw of each sweep step."""
+        return [c[3] for c in self.calls if c[0] == "aim"]
 
     def goto_antennas(self, antennas: list[float], duration_s: float) -> None:
         self._call("goto_antennas", antennas)

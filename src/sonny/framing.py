@@ -7,7 +7,8 @@ move to the head owner, which plays it under its one-move-at-a-time rule.
   `reframe.hold_s`: one yaw move of offset ÷ `reframe.gain_per_deg` degrees centres it. Yaw only.
 - **Search sweep.** No `person` for `sweep.after_no_person_s`, or nobody at session start: one sweep. It isn't
   asked for again until someone is seen. The first person seen after a sweep is framed at once, with no hold:
-  the sweep stops as they enter the frame edge, past centre.
+  the sweep stops as they enter the frame edge, past centre, and the head may have found them alone, so even
+  a centred person gets the re-frame that brings the body round to face them.
 
 Frames taken during a head move (`Detections.head_moving`) count for nothing and restart the hold. The session
 start counts from the first still frame, after the glide to the framing pose.
@@ -58,7 +59,7 @@ class Framing:
         reframe = Reframe(-offset / self.cfg.reframe.gain_per_deg)
         if self._swept:
             self._swept = False
-            return reframe if abs(reframe.yaw_deg) >= 1 else None  # under a degree is no move
+            return reframe  # even a small one: the body turns to face them
         if abs(offset) <= self.cfg.reframe.offcentre:
             self._off_since = None
             return None

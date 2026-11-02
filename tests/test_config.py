@@ -24,6 +24,7 @@ def test_defaults_match_spec():
     assert cfg.reframe.gain_per_deg == 0.0082
     assert (cfg.reframe.offcentre, cfg.reframe.hold_s) == (0.15, 3)
     assert (cfg.sweep.after_no_person_s, cfg.sweep.speed_dps) == (10, 40)
+    assert cfg.sweep.head_range_deg < 65  # the SDK keeps the head within 65° of the body
     assert (cfg.session.duration_min_min, cfg.session.duration_max_min) == (5, 120)
     assert (cfg.hooks.max_active, cfg.hooks.min_refire_s) == (5, 60)
     assert cfg.media.audio_sample_rate == 16000

@@ -128,6 +128,15 @@ def test_after_a_sweep_the_first_person_is_framed_at_once(setup):
     assert run(framing, clock, CFG.reframe.hold_s + 1, person_at(0.5)) == []
 
 
+def test_after_a_sweep_even_a_centred_person_gets_a_reframe_so_the_body_turns_to_face_them(setup):
+    framing, clock = setup
+    run(framing, clock, 2, person_at(0.5))
+    run(framing, clock, CFG.sweep.after_no_person_s + 0.5, None)
+    run(framing, clock, 1, person_at(0.505), moving=True)
+    [move] = run(framing, clock, 0.1, person_at(0.505))
+    assert isinstance(move, Reframe) and abs(move.yaw_deg) < 1
+
+
 def test_a_declined_sweep_is_asked_for_again(setup):
     framing, clock = setup
     run(framing, clock, 2, person_at(0.5))

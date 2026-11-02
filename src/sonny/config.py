@@ -160,7 +160,8 @@ class Reframe:
 class Sweep:
     after_no_person_s: float
     speed_dps: float
-    yaw_range_deg: float
+    head_range_deg: float
+    body_range_deg: float
     step_hz: float
     start_look_s: float
 

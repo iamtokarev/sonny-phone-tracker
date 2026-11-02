@@ -27,9 +27,11 @@ its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
 Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
 level and still in a Focus Session, with tracking stopped before the session starts. In a session
-Sonny watches through its camera (not in a Pause): one slow yaw move re-centres you when you've
-stayed off-centre for 3 s, and after 10 s with nobody in frame it sweeps once to find you. Phone
-Use and Away go to the session log, with a detection summary every second. The agent
+Sonny watches through its camera (not in a Pause) and keeps its body facing you with the head
+centred: one slow turn of both re-centres you when you've stayed off-centre for 3 s. After 10 s
+with nobody in frame it searches once, with the head first and then turning the body, and turns
+to face you once found. Phone Use and Away print an `attention:` line and go to the session log,
+with a detection summary every second. The agent
 colours its lines with `play_emotion` (18 moves, played on the daemon with their sound at volume
 62); a move and a line never overlap and play in the order the agent called them.
 

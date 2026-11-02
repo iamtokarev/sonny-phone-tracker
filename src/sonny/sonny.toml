@@ -104,7 +104,8 @@ min_move_s = 0.8  # a small correction still takes this long, so it stays smooth
 [sweep]
 after_no_person_s = 10
 speed_dps = 40
-yaw_range_deg = 120  # either side of straight ahead: the head's full yaw with the body turning along (ticket 19)
+head_range_deg = 55  # the head alone searches this far either side of the body first (the SDK allows 65°)
+body_range_deg = 90  # then the body turns, up to this far either side of straight ahead; framing keeps it here too
 step_hz = 50  # how often a sweep steps the head target
 start_look_s = 1  # at session start, nobody in still frames this long means nobody is in frame: sweep at once
 

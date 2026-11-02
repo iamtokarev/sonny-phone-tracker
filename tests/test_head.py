@@ -237,19 +237,33 @@ def test_a_reframe_is_one_yaw_move_from_the_current_framing_yaw(session_head):
     owner, robot, written = session_head
     assert owner.reframe(10.0)
     framing_done(owner)
-    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST) and robot.free_body[-1]
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST)
+    assert robot.bodies[-1] == 10.0  # the body turns to face the owner; the head ends centred on it
     assert owner.reframe(-4.0)
     framing_done(owner)
-    assert robot.calls[-1][1] == pytest.approx(6.0)
+    assert robot.calls[-1][1] == pytest.approx(6.0) and robot.bodies[-1] == pytest.approx(6.0)
     starts = [f for t, f in written if t == "move_start"]
-    assert starts[0] == {"name": "reframe", "source": "framing", "yaw_from": 0.0, "yaw_to": 10.0}
+    assert starts[0] == {"name": "reframe", "source": "framing", "yaw_from": 0.0, "yaw_to": 10.0, "body_from": 0.0}
 
 
-def test_a_reframe_stays_within_the_yaw_range(session_head):
+def test_a_reframe_stays_within_the_body_range(session_head):
     owner, robot, _ = session_head
-    assert owner.reframe(CFG.sweep.yaw_range_deg + 50)
+    assert owner.reframe(CFG.sweep.body_range_deg + 50)
     framing_done(owner)
-    assert robot.calls[-1][1] == CFG.sweep.yaw_range_deg
+    assert robot.calls[-1][1] == CFG.sweep.body_range_deg == robot.bodies[-1]
+
+
+def test_the_session_pose_faces_the_body_where_the_head_looks(session_head):
+    owner, robot, _ = session_head
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    owner.settle(session_running=True, listening=False)
+    play(owner, "yes1")
+    robot.played.wait(2)
+    robot.finish()
+    framing_done(owner)
+    wait_until(lambda: robot.calls[-1][0] == "goto")
+    assert robot.calls[-1][1] == 10.0 and robot.bodies[-1] == 10.0
 
 
 def test_framing_waits_for_the_glide_to_the_session_pose_and_an_emotion_move(session_head):
@@ -281,35 +295,45 @@ def test_no_framing_outside_a_session():
     owner.quit()
 
 
-def test_a_sweep_stops_on_the_first_person_and_frames_from_there(session_head):
+def test_a_sweep_searches_with_the_head_first_then_turns_the_body(session_head):
+    owner, robot, written = session_head
+    c = CFG.sweep
+    assert owner.reframe(10.0)
+    framing_done(owner)
+    assert owner.sweep()
+    framing_done(owner)
+    heads, bodies = robot.aims(), robot.aim_bodies()
+    first_turn = next(i for i, b in enumerate(bodies) if b != 10.0)
+    assert {round(h - 10.0) for h in heads[:first_turn]} >= {round(c.head_range_deg), -round(c.head_range_deg)}
+    assert all(abs(h - b) <= c.head_range_deg + 1e-9 for h, b in zip(heads, bodies, strict=True))
+    assert max(bodies) == pytest.approx(c.body_range_deg) and min(bodies) == pytest.approx(-c.body_range_deg)
+    assert max(heads) == pytest.approx(c.body_range_deg + c.head_range_deg)
+    assert min(heads) == pytest.approx(-c.body_range_deg - c.head_range_deg)
+    step = FAST_SWEEP.sweep.speed_dps / FAST_SWEEP.sweep.step_hz + 1e-9
+    moves = [
+        max(abs(h2 - h1), abs(b2 - b1)) for (h1, b1), (h2, b2) in itertools.pairwise(zip(heads, bodies, strict=True))
+    ]
+    assert max(moves) <= step  # a steady speed
+    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST) and robot.bodies[-1] == 10.0
+    assert written[-1][1]["found"] is False
+
+
+def test_a_sweep_stops_on_the_first_person_and_the_reframe_brings_the_body_round(session_head):
     owner, robot, written = session_head
     owner.cfg = slow_sweep()
     assert owner.sweep()
     wait_until(lambda: len(robot.aims()) >= 5)
     owner.sweep_found()
     framing_done(owner)
-    stop = robot.aims()[-1]
-    assert 0 < abs(stop) < CFG.sweep.yaw_range_deg
+    stop, body = robot.aims()[-1], robot.aim_bodies()[-1]
+    assert 0 < abs(stop) <= CFG.sweep.head_range_deg and body == 0.0  # found by the head alone
     assert robot.names()[-1] == "aim"  # it stays where it found someone
     end = written[-1]
     assert end[0] == "move_end" and end[1]["name"] == "sweep" and end[1]["found"] is True
+    assert end[1]["yaw"] == round(stop, 1) and end[1]["body"] == 0.0
     assert owner.reframe(2.0)
     framing_done(owner)
-    assert robot.calls[-1][1] == pytest.approx(stop + 2.0)
-
-
-def test_a_sweep_that_finds_nobody_covers_the_yaw_range_and_returns_to_the_framing_pose(session_head):
-    owner, robot, written = session_head
-    assert owner.reframe(10.0)
-    framing_done(owner)
-    assert owner.sweep()
-    framing_done(owner)
-    aims = robot.aims()
-    assert max(aims) == pytest.approx(CFG.sweep.yaw_range_deg) and min(aims) == pytest.approx(-CFG.sweep.yaw_range_deg)
-    steps = [abs(b - a) for a, b in itertools.pairwise(aims)]
-    assert max(steps) <= FAST_SWEEP.sweep.speed_dps / FAST_SWEEP.sweep.step_hz + 1e-9  # a steady speed
-    assert robot.calls[-1] == ("goto", 10.0, CFG.frame.pitch_deg, REST)
-    assert written[-1][1]["found"] is False
+    assert robot.calls[-1][1] == pytest.approx(stop + 2.0) and robot.bodies[-1] == pytest.approx(stop + 2.0)
 
 
 def test_stopping_framing_ends_a_sweep_at_the_framing_pose(session_head):
