@@ -338,7 +338,7 @@ def test_a_follow_up_is_refused_and_does_not_fire_during_an_excuse(rig):
     assert "Excuse" in followup(rig)["refused"]
     rig.advance(30)
     assert rig.wake() is None
-    assert any(r["type"] == "hook_expired" for r in rig.records())
+    assert any(r["type"] == "hook_expired" and r["reason"] == "excused" for r in rig.records())
 
 
 def test_a_follow_up_whose_episode_turned_into_away_does_not_fire(rig):

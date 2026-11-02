@@ -291,16 +291,19 @@ class FocusClock:
             s.hooks.remove(hook)
             self._write("hook_cancelled", id=hook.id, reason="episode_closed")
 
-    def _followup_stands(self, s: Session, hook: Hook) -> bool:
-        """A due follow-up fires only while its episode is open, of its kind, not Excused, and below the Away cap."""
+    def _followup_void(self, s: Session, hook: Hook) -> str | None:
+        """Why a due follow-up won't fire: it fires only while its episode is open, of its kind, not Excused, and
+        below the Away cap."""
         e = self.nudges.episode
-        return (
-            e is not None
-            and e.number == hook.episode
-            and e.kind == FOLLOWUPS[hook.event]
-            and s.excuse_until_s is None
-            and not (hook.event is EventType.AWAY_CONTINUING and self.nudges.away_capped)
-        )
+        if e is None or e.number != hook.episode:
+            return "episode_closed"
+        if e.kind != FOLLOWUPS[hook.event]:
+            return "episode_changed_kind"
+        if s.excuse_until_s is not None:
+            return "excused"
+        if hook.event is EventType.AWAY_CONTINUING and self.nudges.away_capped:
+            return "away_cap"
+        return None
 
     def list_hooks(self) -> dict:
         s = self._session
@@ -337,8 +340,8 @@ class FocusClock:
                 hook.at_remaining_s is not None and remaining <= hook.at_remaining_s
             ):
                 s.hooks.remove(hook)
-                if hook.episode is not None and not self._followup_stands(s, hook):
-                    self._write("hook_expired", id=hook.id, reason="episode_moved_on")
+                if hook.episode is not None and (void := self._followup_void(s, hook)) is not None:
+                    self._write("hook_expired", id=hook.id, reason=void)
                     continue
                 self._write("hook_fired", id=hook.id)
                 data = {"hook_id": hook.id, "note": hook.note}
