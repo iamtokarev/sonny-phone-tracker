@@ -81,7 +81,7 @@ def test_frames_taken_during_a_head_move_restart_the_hold(setup):
 def test_a_declined_reframe_waits_for_a_new_hold(setup):
     framing, clock = setup
     run(framing, clock, 1, person_at(0.5))
-    [move] = run(framing, clock, CFG.reframe.hold_s + 0.15, person_at(0.75))
+    [move] = run(framing, clock, CFG.reframe.hold_s + 0.1, person_at(0.75))  # asked for on the last frame
     framing.declined(move)  # the head was busy with an emotion move
     assert run(framing, clock, CFG.reframe.hold_s - 0.5, person_at(0.75)) == []
     assert len(run(framing, clock, 0.6, person_at(0.75))) == 1
@@ -163,3 +163,33 @@ def test_an_unsure_person_box_is_nobody(setup):
     run(framing, clock, 2, person_at(0.5))
     unsure = person_at(0.5, conf=CFG.person.min_conf - 0.1)
     assert run(framing, clock, CFG.sweep.after_no_person_s + 0.5, unsure) == [Sweep()]
+
+
+def test_a_reframe_that_does_not_bring_the_box_toward_centre_is_not_repeated(setup):
+    """On Sonny a box stayed at x 0.33 through ~40 re-frames. If a re-frame leaves the box where it was, that box
+    doesn't move with the head (or isn't the owner): framing stops chasing it until it moves or is lost."""
+    framing, clock = setup
+    run(framing, clock, 1, person_at(0.5))
+    assert len(run(framing, clock, CFG.reframe.hold_s + 0.15, person_at(0.25))) == 1
+    run(framing, clock, 1, person_at(0.25), moving=True)  # the move
+    assert run(framing, clock, 30, person_at(0.25)) == []
+    assert run(framing, clock, CFG.reframe.hold_s + 0.5, person_at(0.8)) != []  # it moved: framing again
+
+
+def test_the_check_clears_once_the_box_is_lost(setup):
+    framing, clock = setup
+    run(framing, clock, 1, person_at(0.5))
+    run(framing, clock, CFG.reframe.hold_s + 0.15, person_at(0.25))
+    run(framing, clock, 1, person_at(0.25), moving=True)
+    run(framing, clock, 5, person_at(0.25))
+    run(framing, clock, 2, None)
+    assert len(run(framing, clock, CFG.reframe.hold_s + 0.5, person_at(0.25))) == 1
+
+
+def test_a_reframe_that_centres_the_box_keeps_framing_normal(setup):
+    framing, clock = setup
+    run(framing, clock, 1, person_at(0.5))
+    run(framing, clock, CFG.reframe.hold_s + 0.15, person_at(0.25))
+    run(framing, clock, 1, person_at(0.5), moving=True)
+    run(framing, clock, 5, person_at(0.52))
+    assert len(run(framing, clock, CFG.reframe.hold_s + 0.5, person_at(0.25))) == 1
