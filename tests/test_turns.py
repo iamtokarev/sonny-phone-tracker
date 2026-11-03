@@ -58,10 +58,17 @@ class Line:
 class Harness:
     def __init__(self) -> None:
         self.clock, self.line = Clock(), Line()
+        self.nudging = False  # the line Sonny says now is a Nudge
         self.wakes: list[tuple[float, bool]] = []  # (score, new_conversation) of each wake that counted
         self.turns: list[bool] = []  # enable_interruptions of each turn start
         self.strategy = WakeWordTurnStart(
-            CFG.wake, CFG.media.audio_sample_rate, amplitude_score, self.line, self._on_wake, clock=self.clock
+            CFG.wake,
+            CFG.media.audio_sample_rate,
+            amplitude_score,
+            self.line,
+            self._on_wake,
+            line_reopens=lambda: not self.nudging,
+            clock=self.clock,
         )
 
         self.pushed_up: list = []
@@ -158,6 +165,34 @@ def test_the_window_reopens_after_every_line_from_sonny(h):
     assert h.vad_start() is ProcessFrameResult.CONTINUE
     h.later(1)
     assert h.vad_start() is ProcessFrameResult.STOP
+
+
+def say_a_line(h: Harness) -> None:
+    h.send(BotStartedSpeakingFrame())
+    h.later(3)
+    h.send(BotStoppedSpeakingFrame())
+
+
+def test_a_nudge_line_opens_no_window_so_answering_it_takes_the_wake_word(h):
+    h.nudging = True
+    say_a_line(h)
+    assert h.vad_start() is ProcessFrameResult.STOP  # speech on the phone doesn't reach the agent
+    assert h.wake() is ProcessFrameResult.STOP and h.turns == [True]
+
+
+def test_a_reply_to_the_owner_inside_the_window_still_reopens_it(h):
+    h.nudging = True
+    say_a_line(h)
+    h.wake()  # "Hey Sonny, ..." answers the Nudge
+    h.end_turn()
+    h.nudging = False
+    say_a_line(h)  # the reply
+    h.later(CFG.wake.window_s - 0.5)
+    assert h.vad_start() is ProcessFrameResult.CONTINUE  # the owner answers the reply without a wake
+    h.end_turn()
+    say_a_line(h)  # and the reply to that, said inside the window, reopens it again
+    h.later(CFG.wake.window_s - 0.5)
+    assert h.vad_start() is ProcessFrameResult.CONTINUE
 
 
 def test_dropping_a_bare_wake_keeps_the_window_open_for_the_command(h):

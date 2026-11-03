@@ -125,6 +125,12 @@ class NudgeGuard:
     def gap_left_s(self) -> float:
         return max(0.0, self._last_nudge + self._gap_s - self._now())
 
+    @property
+    def nudging(self) -> bool:
+        """The running wake-up is for Phone Use or Away: its line is a Nudge, not a reply, and opens no reply
+        window (answering it takes the Wake Word, so talk on the phone never reaches the agent)."""
+        return self._wakeup in NUDGE_WAKES
+
     def begin(self, kind: EventType | str) -> None:
         """A wake-up starts: an owner turn or a conductor event."""
         self._wakeup, self._for, self._nudged = EventType(kind), self.episode, False

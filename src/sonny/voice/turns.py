@@ -3,7 +3,8 @@
 - A wake opens the window, starts a turn and barges in on Sonny's speech (the user aggregator turns
   the interruption into `clear_player()` at the output).
 - A VAD turn start passes only inside the window and never while Sonny speaks.
-- After every line from Sonny the window reopens, so a reply needs no second wake.
+- After a line from Sonny the window reopens, so a reply needs no second wake; except after a Nudge
+  (`line_reopens`), which the owner answers with the Wake Word, or talk on the phone would reach the agent.
 - A wake is ignored while Sonny speaks a line containing "Sonny" (the self-wake guard).
 
 Speech not meant for Sonny (talk to someone else) never reaches the LLM:
@@ -80,11 +81,13 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
         score: Callable[[np.ndarray], float],
         line_text: Callable[[], str],
         on_wake: Callable[[WakeSeen], None],
+        line_reopens: Callable[[], bool] = lambda: True,  # the line that just ended opens the window
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         super().__init__(enable_interruptions=True)
         self.cfg = cfg
         self._score, self._line_text, self._on_wake, self._clock = score, line_text, on_wake, clock
+        self._line_reopens = line_reopens
         self._frame_len = round(cfg.frame_s * sample_rate)  # samples per scored frame
         self._buf = np.zeros(0, np.int16)
         self._last_wake = -float("inf")
@@ -114,7 +117,8 @@ class WakeWordTurnStart(BaseUserTurnStartStrategy):
             self.bot_speaking = True
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self.bot_speaking = False
-            self.reopen_window()
+            if self._line_reopens():
+                self.reopen_window()
         elif isinstance(frame, VADUserStartedSpeakingFrame):
             if self.bot_speaking or not self.window_open:
                 return ProcessFrameResult.STOP

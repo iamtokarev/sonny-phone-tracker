@@ -252,6 +252,16 @@ def test_replies_to_the_owner_are_never_limited(rig):
     assert rig.clock.nudges.gap_left_s() == pytest.approx(GAP - 1)
 
 
+def test_only_a_nudge_wake_up_is_nudging(rig):
+    rig.attention(PHONE, 1)
+    rig.wake()
+    assert rig.clock.nudges.nudging  # its line opens no reply window
+    rig.owner()
+    assert not rig.clock.nudges.nudging
+    rig.tools.begin_wakeup(EventType.FOCUSED_RESUMED)
+    assert not rig.clock.nudges.nudging
+
+
 def test_lines_for_other_events_are_not_nudges(rig):
     rig.attention(PHONE, 1)
     rig.tools.begin_wakeup(EventType.TIMER)

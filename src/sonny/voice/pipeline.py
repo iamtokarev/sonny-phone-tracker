@@ -314,7 +314,14 @@ class VoicePipeline:
             if not seen.ignored:
                 head.converse()
 
-        self.wake = WakeWordTurnStart(cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, wake)
+        self.wake = WakeWordTurnStart(
+            cfg.wake,
+            rate,
+            load_wake_scorer(cfg.wake),
+            lambda: line.text,
+            wake,
+            line_reopens=lambda: not self.clock.nudges.nudging,
+        )
 
         def bare_wake(text: str) -> None:
             self.conversation.on_bare_wake(text)
