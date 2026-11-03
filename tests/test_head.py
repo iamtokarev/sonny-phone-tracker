@@ -436,3 +436,16 @@ def test_at_the_far_end_of_the_range_no_reframe_plays_that_would_not_move(sessio
     assert robot.at == (far, CFG.sweep.body_range_deg)
     assert not owner.reframe(10.0)  # already there: nothing plays, framing waits for a new hold
     assert owner.reframe(-10.0)
+
+
+def test_revive_after_a_daemon_restart_wakes_the_head_into_its_mode_pose(head):
+    owner, robot, _ = head
+    owner.enter_session()
+    wait_until(lambda: "goto" in robot.names())
+    robot.calls.clear()
+    robot.motors = True
+    owner.revive()
+    wait_until(lambda: "goto" in robot.names())
+    assert robot.names()[0] == "wake_up"  # motors come up asleep after a restart
+    assert robot.calls[-1][1:3] == (0.0, CFG.frame.pitch_deg)  # back to the framing pose
+    assert "playing" in owner.request("perk")  # and moves are available again

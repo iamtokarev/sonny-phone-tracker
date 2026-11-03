@@ -140,6 +140,9 @@ class Blind:
     freeze_s: float
     reconnect_every_s: float
     restored_event_after_s: float
+    check_s: float
+    daemon_check_s: float
+    sleep_detect_s: float
 
 
 @dataclass(frozen=True)

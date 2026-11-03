@@ -166,6 +166,18 @@ class HeadOwner:
         finally:
             self._robot.sleep()
 
+    def revive(self) -> None:
+        """After a daemon restart (spec §9 reconnect): wake the head, then back to its mode's pose and tracking."""
+        self._jobs.put(self._revive_job)
+
+    def _revive_job(self) -> None:
+        if self._stop.is_set():
+            return
+        with self._moving():
+            self._robot.wake_up()
+        self._motors_up()
+        self._settle_pose()
+
     def _run(self) -> None:
         """Runs the jobs in order; when idle, checks the motors every `motors_check_s`, so `play_emotion`
         answers `unavailable` without trying first."""

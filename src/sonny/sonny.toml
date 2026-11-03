@@ -87,9 +87,12 @@ settle_s = 0.6  # frames this long after a head move ends still show it (~277 ms
 summary_every_s = 1  # the detection summary in the session log (spec §10)
 
 [blind]
-freeze_s = 5
-reconnect_every_s = 5
-restored_event_after_s = 30
+freeze_s = 5  # no fresh frame this long is Blind (routine freezes are 2-4 s)
+reconnect_every_s = 5  # while the media session or the daemon is down, try again this often
+restored_event_after_s = 30  # a Blind spell longer than this ends with `link.restored`, which wakes the agent
+check_s = 0.5  # how often the link watch reads the media hub's arrival times
+daemon_check_s = 5  # how often the link watch asks the daemon's status while the link is up
+sleep_detect_s = 2  # a jump in slept time this big between two conductor ticks is the Mac waking from sleep
 
 [frame]
 pitch_deg = 0
