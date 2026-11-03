@@ -70,19 +70,19 @@ def test_a_refused_call_returns_its_reason(tools):
 def test_bad_arguments_return_an_error(tools, name, args):
     tools, _ = tools
     tools.call("start_session", {"task": "email"})
-    tools.begin_wakeup()
+    tools.begin_wakeup("owner.spoke")
     assert tools.call(name, args)["error"].startswith("bad arguments")
 
 
 def test_a_session_change_runs_once_per_wake_up(tools):
     tools, _ = tools
     tools.call("start_session", {"task": "email", "duration_minutes": 20})
-    tools.begin_wakeup()
+    tools.begin_wakeup("owner.spoke")
     assert tools.call("extend", {"minutes": 15})["remaining_min"] == 35
     assert tools.call("extend", {}) == {"refused": "extend already ran in this wake-up; nothing more to do"}
     assert "hook_id" in tools.call("set_hook", {"event": "timer", "note": "a", "after_seconds": 60})
     assert "hook_id" in tools.call("set_hook", {"event": "timer", "note": "b", "after_seconds": 120})
-    tools.begin_wakeup()
+    tools.begin_wakeup("owner.spoke")
     assert tools.call("extend", {})["remaining_min"] == 45
 
 

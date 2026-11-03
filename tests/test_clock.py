@@ -320,10 +320,10 @@ def test_remaining_hook_bounds(rig):
         rig.clock.set_hook(EventType.TIMER, "?")
 
 
-def test_only_timer_and_remaining_hooks_are_offered(rig):
+def test_only_the_agent_hooks_are_offered(rig):
     rig.clock.start("email", 10)
-    with pytest.raises(Refused, match=r"timer or session\.remaining"):
-        rig.clock.set_hook(EventType.PHONE_USE_CONTINUING, "follow up", after_seconds=30)
+    with pytest.raises(Refused, match=r"one of timer, session\.remaining, phone_use\.continuing, away\.continuing"):
+        rig.clock.set_hook("excuse.expired", "?", after_seconds=60)
 
 
 def test_hooks_need_a_session_and_cancel_needs_a_hook(rig):

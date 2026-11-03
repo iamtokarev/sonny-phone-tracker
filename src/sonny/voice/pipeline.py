@@ -172,10 +172,11 @@ class Conversation:
         self._begin(message)
 
     def _begin(self, message: LLMStandardMessage) -> None:
-        self._write("wakeup", payload=wakeup_payload(message))
+        payload = wakeup_payload(message) or {}
+        self._write("wakeup", payload=payload)
         self._last_said = self._clock()
         if self._tools is not None:
-            self._tools.begin_wakeup()
+            self._tools.begin_wakeup(payload["event"])
         self._replying = True
         self._activity.begin()
 
@@ -214,6 +215,8 @@ class Conversation:
         self._write("line", **asdict(line))
         self._last_said = self._clock()
         self._replying = False
+        if line.text and self._tools is not None:
+            self._tools.spoke()
         if line.interrupted and line.text:
             self._cut_line = line.text
 
@@ -286,10 +289,10 @@ class VoicePipeline:
         self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, api_key: str
     ) -> None:
         self.cfg = cfg
-        self.clock = FocusClock(cfg, log, bus)
+        self.clock = FocusClock(cfg, log, bus, on_nudge=lambda episode, i: self.vision.record_nudge(episode, i))
         self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
         self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
-        conductor = Conductor(self.clock.snapshot)
+        conductor = Conductor(self.clock.snapshot, self.clock.nudges)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
         gate = MoveGate(head, cfg.head.move_poll_s)
         self.activity = AgentActivity(cfg.conductor.stuck_after_s)
@@ -311,7 +314,14 @@ class VoicePipeline:
             if not seen.ignored:
                 head.converse()
 
-        self.wake = WakeWordTurnStart(cfg.wake, rate, load_wake_scorer(cfg.wake), lambda: line.text, wake)
+        self.wake = WakeWordTurnStart(
+            cfg.wake,
+            rate,
+            load_wake_scorer(cfg.wake),
+            lambda: line.text,
+            wake,
+            line_reopens=lambda: not self.clock.nudges.nudging,
+        )
 
         def bare_wake(text: str) -> None:
             self.conversation.on_bare_wake(text)

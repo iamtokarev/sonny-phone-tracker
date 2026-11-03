@@ -87,6 +87,7 @@ class VisionWorker:
         self._frame_t = 0.0  # arrival time of the last frame detected
         self._finding = 0  # frames in a row with a person sure enough to stop a sweep
         self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()  # the rules: this thread runs them, the conductor reports Nudges
 
     def load(self) -> bool:
         """Load the detector (exported on the first run), before `ready`. Says whether Sonny can watch."""
@@ -176,12 +177,20 @@ class VisionWorker:
             else:
                 self._apply(lambda rules: rules.end_excuse())
 
+    def record_nudge(self, episode: int, intensity: str) -> None:
+        """A Nudge Sonny gave in `episode`, for the rules' copy of it (the log's episode record). Thread-safe."""
+        with self._lock:
+            rules = self._rules
+            if rules is not None and rules.episode is not None and rules.episode.number == episode:
+                rules.record_nudge(intensity)
+
     def _apply(self, change: Callable[[AttentionRules], list[Event]]) -> None:
         """Run a change on the rules; publish its events and log them with the episode and state changes."""
         rules = self._rules
         assert rules is not None
-        episode, state = rules.episode, rules.state
-        events = change(rules)
+        with self._lock:
+            episode, state = rules.episode, rules.state
+            events = change(rules)
         if episode is not None and episode.closed_at is not None:
             self._write("episode_closed", **_episode_fields(episode))
         if rules.episode is not None and rules.episode is not episode:

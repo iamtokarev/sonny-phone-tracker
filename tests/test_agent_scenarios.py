@@ -51,11 +51,37 @@ def competent(payload: dict) -> tuple[str, list[tuple[str, dict]]]:
             if phrase in said:
                 return line, calls
         return "", []
+    if event in ("phone_use.started", "phone_use.continuing", "away.started", "away.continuing"):
+        return nudge(payload["state"]["episode"])
+    if event == "excuse.expired" and payload["state"]["attention"] != "focused":
+        return "", []  # the fresh episode's wake-up follows
     return {
         "session.remaining": ("Ten minutes left, finish strong.", []),
         "session.ended": ("Time's up, nicely done!", []),
         "excuse.expired": ("Welcome back to it.", []),
+        "focused.resumed": ("There you are, nice.", [("play_emotion", {"name": "cheerful1"})]),
     }.get(event, ("", []))
+
+
+PHONE_NUDGES = [  # subtle, medium, strong, then empathy
+    ("twitch", "Psst, the methods are waiting."),
+    ("wiggle", "Come on, phone down."),
+    ("reprimand3", "Oh come on, really?"),
+    ("calming1", "Everything okay? I can pause us if you need."),
+]
+
+
+def nudge(episode: dict) -> tuple[str, list[tuple[str, dict]]]:
+    """A Nudge as the prompt asks: escalating, a follow-up after each one, few Away lines."""
+    n = len(episode["nudges"])
+    if episode["kind"] == "away":
+        calls = []
+        if episode["away_nudges"] < CFG.away.max_nudges_per_episode - 1:
+            calls = [("set_hook", {"event": "away.continuing", "note": "still away", "after_seconds": 120})]
+        return "Come back when you can, the methods miss you.", calls
+    move, line = PHONE_NUDGES[min(n, len(PHONE_NUDGES) - 1)]
+    after = {"event": "phone_use.continuing", "note": "still on the phone", "after_seconds": 30 + 15 * n}
+    return line, [("play_emotion", {"name": move}), ("set_hook", after)]
 
 
 @pytest.mark.parametrize("name", list(SCENARIOS))
@@ -77,6 +103,31 @@ def test_the_generic_checks_catch_a_misbehaving_agent(tmp_path):
     failed = {n for n, ok, _ in generic_checks(r) if not ok}
     r.close()
     assert failed == {"never says its name", "no malformed tool calls"}
+
+
+def test_the_nudge_checks_catch_an_agent_that_never_follows_up(tmp_path):
+    def forgetful(payload):
+        if payload["event"] == "phone_use.started":
+            return "Phone down, please.", [("play_emotion", {"name": "reprimand1"})]
+        return competent(payload)
+
+    checks, r = run_scenario(CFG, ScriptedAgent(forgetful), "phone-use", tmp_path)
+    failed = {n for n, ok, _ in checks if not ok}
+    assert failed == {"follow-up after every Nudge", "kept Nudging over 4 min (>= 3)"}, "\n".join(r.transcript)
+
+
+def test_code_holds_a_pushy_agent_to_two_away_lines(tmp_path):
+    def pushy(payload):
+        if payload["event"] in ("away.started", "away.continuing"):
+            again = {"event": "away.continuing", "note": "again", "after_seconds": 20}
+            return "Where did you go?", [("set_hook", again)]
+        return competent(payload)
+
+    checks, r = run_scenario(CFG, ScriptedAgent(pushy), "away", tmp_path)
+    passed = {n for n, ok, _ in checks if ok}
+    lines = [line for w in r.wakeups if w.event.startswith("away.") for line in w.lines]
+    assert len(lines) == CFG.away.max_nudges_per_episode, "\n".join(r.transcript)
+    assert "at most 2 Away lines per episode" in passed
 
 
 def test_a_wake_up_that_never_stops_calling_tools_hits_the_step_cap(tmp_path):

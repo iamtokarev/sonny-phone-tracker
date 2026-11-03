@@ -1,33 +1,38 @@
 """Agent-scenario replay (spec §7 "Agent instructions"), ported from the ticket 09/20 harness.
 
-Scripted owner lines and clock time run through the real session clock, tool handlers, conductor and
-conversation context, on scripted time. The agent is either scripted (`ScriptedAgent`, for the unit
-tests) or the configured model on OpenRouter (`LiveAgent`, opt-in). Speech is the agent's plain text: a
-reply's text is Sonny's line; an empty reply is silence. No robot, no audio, no Pipecat pipeline: each
-wake-up runs to the end before time moves on, the way the conductor holds events during one.
+Scripted owner lines, attention events and clock time run through the real session clock, tool handlers,
+Nudge limits, conductor and conversation context, on scripted time. The agent is either scripted
+(`ScriptedAgent`, for the unit tests) or the configured model on OpenRouter (`LiveAgent`, opt-in). Speech is
+the agent's plain text: a reply's text is Sonny's line, spoken once the reply's tool calls ran (as a move is
+granted before its line ends on Sonny); an empty reply is silence. No robot, no audio, no camera, no Pipecat
+pipeline: each wake-up runs to the end before time moves on, the way the conductor holds events during one.
 """
 
 import json
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
 from sonny.config import Config
-from sonny.events import EndReason, EventBus
+from sonny.events import EndReason, Event, EventBus, EventType
 from sonny.focus.clock import FocusClock
 from sonny.focus.conductor import Conductor, wakeup_payload
+from sonny.focus.nudges import AWAY_WAKES, NUDGE_WAKES, SPOKEN
 from sonny.focus.tools import SessionTools
 from sonny.session_log import SessionLog
 from sonny.voice.activity import AgentActivity
-from sonny.voice.pipeline import Conducting, Conversation
+from sonny.voice.pipeline import Conducting, Conversation, SpokenLine
 from sonny.voice.prompt import agent_prompt
 from tests.fakes import StubHead
 
 MAX_STEPS_PER_WAKEUP = 6  # LLM calls; a wake-up that needs more never ends on its own
 FILLER = re.compile(r"^\W*(done|ok|okay|noted|sure|silence|\(.*\)|\[.*\]|\*.*\*)\W*$", re.I)
 TOOL_TALK = re.compile(r"set_hook|grant_excuse|start_session|end_session|\bhook\b|\btool\b|calling ", re.I)
+FOLLOWUP_OF = {"phone_use": "phone_use.continuing", "away": "away.continuing"}
+LEVEL = {"subtle": 1, "medium": 2, "strong": 3}
 NAME = re.compile(r"sonny", re.I)
 
 # The agent: given the messages (system prompt first) and the tools, one assistant message as the
@@ -39,6 +44,7 @@ Agent = Callable[[list[dict], list[dict]], dict]
 class Wakeup:
     event: str
     payload: dict
+    t: float
     lines: list[str] = field(default_factory=list)
     calls: list[tuple[str, dict, dict]] = field(default_factory=list)  # name, args, result
     step_cap: bool = False
@@ -49,6 +55,16 @@ class Wakeup:
     def ok_calls(self, name: str) -> list[dict]:
         return [args for args, result in self.called(name) if "refused" not in result and "error" not in result]
 
+    @property
+    def nudge(self) -> bool:
+        """A Nudge wake-up in which Sonny spoke or moved."""
+        return self.event in NUDGE_WAKES and bool(self.lines or self.ok_calls("play_emotion"))
+
+    @property
+    def episode(self) -> dict:
+        """The episode as the agent saw it when woken."""
+        return self.payload["state"].get("episode") or {}
+
 
 class ScriptedTime:
     def __init__(self) -> None:
@@ -58,6 +74,47 @@ class ScriptedTime:
         return self.t
 
 
+class ScriptedAttention:
+    """Attention events as the vision worker publishes them, on the scenario's word instead of the camera's.
+
+    Like the attention rules: an episode opens with the first `.started` from Focused and closes on
+    `focused.resumed`; during an Excuse events are marked as waking no one; when the Excuse ends mid-episode, a
+    fresh episode opens at once with its `.started` (`follow()`, once per step, like the vision worker)."""
+
+    def __init__(self, bus: EventBus, clock: FocusClock, now: Callable[[], float]) -> None:
+        self._bus, self._clock, self._now = bus, clock, now
+        self.state = "focused"
+        self.episodes = 0
+        self._open: int | None = None
+        self._excused = False
+
+    def start(self, kind: str) -> None:
+        if self._open is None:
+            self.episodes += 1
+            self._open = self.episodes
+        self.state = kind
+        self._publish(EventType.PHONE_USE_STARTED if kind == "phone_use" else EventType.AWAY_STARTED)
+
+    def back(self) -> None:
+        assert self._open is not None
+        self._publish(EventType.FOCUSED_RESUMED)
+        self._open, self.state = None, "focused"
+
+    def follow(self) -> None:
+        excused = self._clock.excused
+        if excused == self._excused:
+            return
+        self._excused = excused
+        if not excused and self._open is not None:
+            self._open = None
+            self.start(self.state)
+
+    def _publish(self, kind: EventType) -> None:
+        quiet = self._excused or self._clock.paused
+        data = {"episode": self._open, "wakes": not quiet, "excused": self._excused}
+        self._bus.publish(Event(kind, data, self._now()))
+
+
 class Replay:
     def __init__(self, cfg: Config, agent: Agent, log_dir: Path) -> None:
         self.cfg, self.agent = cfg, agent
@@ -65,7 +122,8 @@ class Replay:
         self.log = SessionLog(log_dir)
         bus = EventBus()
         self.clock = FocusClock(cfg, self.log, bus, now=self.time)
-        conductor = Conductor(self.clock.snapshot)
+        self.attention = ScriptedAttention(bus, self.clock, self.time)
+        conductor = Conductor(self.clock.snapshot, self.clock.nudges)
         self.head = StubHead()  # every move granted; moves and lines aren't timed here
         self.tools = SessionTools(
             cfg, self.clock, lambda type, **f: (self.log.session or self.log.idle).write(type, **f), head=self.head
@@ -106,12 +164,24 @@ class Replay:
         """Move time, delivering each wake-up the conductor hands over on the way."""
         end = self.time.t + seconds
         while True:
+            self.attention.follow()
             if (message := self.conducting.step()) is not None:
                 self.context.add_message(message)
                 self._run(message)
             if self.time.t >= end:
                 break
             self.time.t = min(end, self.time.t + step)
+
+    def phone(self) -> None:
+        """The owner picks up the phone: Phone Use starts (attention rules' 8 s already passed)."""
+        self.attention.start("phone_use")
+
+    def away(self) -> None:
+        """The owner has been gone for the Away start time."""
+        self.attention.start("away")
+
+    def back(self) -> None:
+        self.attention.back()
 
     def start_quietly(self, task: str, minutes: int) -> None:
         """A session that is already running, its session.started wake-up delivered."""
@@ -120,7 +190,7 @@ class Replay:
 
     def _run(self, message: object) -> Wakeup:
         payload = wakeup_payload(message) or {}
-        w = Wakeup(payload.get("event", "?"), payload)
+        w = Wakeup(payload.get("event", "?"), payload, self.time.t)
         self.wakeups.append(w)
         self.transcript.append(f"\n### {w.event} {json.dumps({k: v for k, v in payload.items() if k != 'state'})}")
         self.transcript.append(f"state: {json.dumps(payload.get('state'))}")
@@ -135,8 +205,6 @@ class Replay:
             if text:
                 w.lines.append(text)
                 self.transcript.append(f"- SAYS: {text}")
-            if not calls:
-                return w
             for c in calls:
                 name = c["function"]["name"]
                 try:
@@ -148,6 +216,10 @@ class Replay:
                 w.calls.append((name, args, result))
                 self.transcript.append(f"- {name}({json.dumps(args)}) -> {json.dumps(result)}")
                 self.context.add_message({"role": "tool", "tool_call_id": c["id"], "content": json.dumps(result)})
+            if text:
+                self.conversation.on_line(SpokenLine(text, self.time.t, self.time.t, interrupted=False))
+            if not calls:
+                return w
         w.step_cap = True
         self.transcript.append("- (step cap reached)")
         return w
@@ -172,6 +244,13 @@ def generic_checks(r: Replay) -> list[Check]:
     lines = [line for w in r.wakeups for line in w.lines]
     stray = [line for line in lines if FILLER.match(line) or TOOL_TALK.search(line)]
     errors = [res for w in r.wakeups for _, _, res in w.calls if "error" in res]
+    followups = [len([a for a in w.ok_calls("set_hook") if a.get("event") in FOLLOWUP_OF.values()]) for w in r.wakeups]
+    stacked = [w.event for w in r.wakeups if sum(h["event"] in FOLLOWUP_OF.values() for h in _hooks(w)) > 1]
+    away_lines: dict[int, int] = defaultdict(int)
+    for w in r.wakeups:
+        if w.event in AWAY_WAKES and w.lines:
+            away_lines[w.episode.get("number", 0)] += 1
+    cap = r.cfg.away.max_nudges_per_episode
     return [
         ("every wake-up ended on its own", not any(w.step_cap for w in r.wakeups), ""),
         ("at most one line per wake-up", all(len(w.lines) <= 1 for w in r.wakeups), ""),
@@ -179,7 +258,33 @@ def generic_checks(r: Replay) -> list[Check]:
         ("never says its name", not any(NAME.search(line) for line in lines), ""),
         ("silent on session.started", not any(w.lines for w in r.of("session.started")), ""),
         ("no malformed tool calls", not errors, str(errors)[:160]),
+        ("at most one follow-up per wake-up", max(followups, default=0) <= 1, str(followups)),
+        ("no stacked follow-ups", not stacked, str(stacked)),
+        (f"at most {cap} Away lines per episode", max(away_lines.values(), default=0) <= cap, str(dict(away_lines))),
     ]
+
+
+def _hooks(w: Wakeup) -> list[dict]:
+    return w.payload["state"].get("active_hooks") or []
+
+
+def refused(r: Replay) -> list[str]:
+    return [f"{n}: {res['refused']}" for w in r.wakeups for n, _, res in w.calls if "refused" in res]
+
+
+def followup_after_every_nudge(r: Replay, kind: str) -> Check:
+    """Every Nudge set a follow-up of the episode's kind, except an Away Nudge the cap made the last."""
+    cap = r.cfg.away.max_nudges_per_episode
+    nudges = [w for w in r.wakeups if w.nudge and w.episode.get("kind") == kind]
+    due = [w for w in nudges if not (kind == "away" and w.episode.get("away_nudges", 0) >= cap - 1)]
+    good = [w for w in due if any(a.get("event") == FOLLOWUP_OF[kind] for a in w.ok_calls("set_hook"))]
+    return ("follow-up after every Nudge", bool(nudges) and len(good) == len(due), f"{len(good)}/{len(due)}")
+
+
+def escalated(levels: list[int]) -> bool:
+    """Non-decreasing until the first strong one; empathy may follow it."""
+    up = levels[: levels.index(3) + 1] if 3 in levels else levels
+    return up == sorted(up)
 
 
 # ---------------------------------------------------------------- scenarios
@@ -300,6 +405,67 @@ def sc_unclear_number(r: Replay) -> list[Check]:
     ]
 
 
+def sc_phone_use(r: Replay) -> list[Check]:
+    r.start_quietly("write the methods section", 45)
+    r.advance(300)
+    r.phone()
+    r.advance(240)  # follow-ups fire on the way
+    nudges = (r.clock.snapshot()["episode"] or {}).get("nudges", [])
+    levels = [LEVEL[i] for i in nudges if i != SPOKEN]
+    r.back()
+    r.advance(5)
+    back = r.of("focused.resumed")
+    return [
+        ("Nudged on phone_use.started", any(w.nudge for w in r.of("phone_use.started")), ""),
+        followup_after_every_nudge(r, "phone_use"),
+        ("kept Nudging over 4 min (>= 3)", len(nudges) >= 3, str(nudges)),
+        ("escalated (empathy may follow the first strong)", bool(levels) and escalated(levels), str(nudges)),
+        ("acknowledged the return", bool(back) and bool(back[0].lines or back[0].calls), ""),
+        ("no refused calls", not refused(r), "; ".join(refused(r))[:200]),
+    ]
+
+
+def sc_away(r: Replay) -> list[Check]:
+    r.start_quietly("write the methods section", 45)
+    r.advance(120)
+    r.away()
+    r.advance(300)
+    lines = [line for w in r.wakeups if w.event in AWAY_WAKES for line in w.lines]
+    r.back()
+    r.advance(5)
+    back = r.of("focused.resumed")
+    return [
+        ("Nudged on away.started", any(w.nudge for w in r.of("away.started")), ""),
+        ("Away Nudges spoken and few (1-2 lines in 5 min)", 1 <= len(lines) <= 2, str(lines)),
+        followup_after_every_nudge(r, "away"),
+        ("welcomed back", bool(back) and bool(back[0].lines or back[0].calls), ""),
+        ("no refused calls", not refused(r), "; ".join(refused(r))[:200]),
+    ]
+
+
+def sc_excuse_mid_phone_use(r: Replay) -> list[Check]:
+    r.start_quietly("write the methods section", 45)
+    r.advance(200)
+    r.phone()
+    r.advance(5)
+    ask = r.owner("Sorry Sonny, my mum is calling, it's urgent, I need to take this.")
+    granted = ask.ok_calls("grant_excuse")
+    minutes = (granted[0].get("minutes") if granted else None) or r.cfg.excuse.default_min
+    r.advance(minutes * 60 + 30)  # the Excuse ends with the owner still on the phone
+    expired = r.of("excuse.expired")
+    until = expired[0].t if expired else r.time.t
+    during = [w for w in r.wakeups if ask.t < w.t < until and w.event in NUDGE_WAKES]
+    fresh = [w for w in r.of("phone_use.started") if w.payload.get("episode") == 2]
+    return [
+        ("granted the Excuse", bool(granted), str(ask.calls)),
+        ("no Nudge wake-up during the Excuse", not during, str([w.event for w in during])),
+        ("excuse.expired woke the agent", bool(expired), ""),
+        ("the fresh episode woke the agent at once", bool(expired and fresh) and fresh[0].t - expired[0].t <= 2, ""),
+        ("Nudged in the fresh episode", bool(fresh) and fresh[0].nudge, ""),
+        ("no refused calls", not refused(r), "; ".join(refused(r))[:200]),
+    ]
+
+
 def sc_end_early_and_off_task(r: Replay) -> list[Check]:
     r.start_quietly("write the methods section", 45)
     r.advance(300)
@@ -323,6 +489,9 @@ SCENARIOS: dict[str, Callable[[Replay], list[Check]]] = {
     "time-left": sc_time_left,
     "unclear-number": sc_unclear_number,
     "end-early": sc_end_early_and_off_task,
+    "phone-use": sc_phone_use,
+    "away": sc_away,
+    "excuse-mid-phone-use": sc_excuse_mid_phone_use,
 }
 
 
