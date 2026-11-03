@@ -367,6 +367,7 @@ def test_snapshot_in_a_session(rig):
         "elapsed_min": 5.5,
         "remaining_min": 14.5,
         "paused": False,
+        "blind": False,
         "time_up": False,
     }
     assert snap["active_hooks"] == [{"id": 1, "event": "session.remaining", "note": "ten left", "at_remaining_min": 10}]

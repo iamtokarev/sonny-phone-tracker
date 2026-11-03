@@ -213,6 +213,48 @@ def test_a_frozen_stream_is_not_detected_twice(rig):
     assert rig.detector.calls == calls
 
 
+def test_blind_ignores_frames_and_freezes_the_windows_without_resetting_them(rig):
+    rig.run(2, person())
+    rig.run(50)  # nobody for 50 s
+    calls, sweeps = rig.detector.calls, rig.head.sweeps
+    rig.worker.set_blind(True)
+    rig.run(60)  # frames still come (a daemon error), and nobody is there
+    assert rig.detector.calls == calls and rig.events() == [] and rig.head.sweeps == sweeps
+    rig.worker.set_blind(False)
+    rig.run(9)
+    assert "away.started" not in rig.events()  # 59 s of watched absence so far
+    rig.run(2)
+    assert "away.started" in rig.events()
+
+
+def test_blind_keeps_an_open_episode_open(rig):
+    rig.run(2, person())
+    rig.run(9, person(), phone_in_hand=True)
+    assert rig.events() == ["phone_use.started"]
+    rig.worker.set_blind(True)
+    rig.run(20, person())
+    rig.worker.set_blind(False)
+    rig.run(0.5, person())
+    assert rig.events() == [] and rig.records("episode_closed") == []
+    rig.run(6, person())
+    assert rig.events() == ["focused.resumed"]
+
+
+def test_waking_from_sleep_starts_the_windows_over_and_closes_the_episode_quietly(rig):
+    rig.run(2, person())
+    rig.run(9, person(), phone_in_hand=True)
+    rig.events()
+    rig.worker.reset_attention()
+    rig.run(1, person(), phone_in_hand=True)
+    assert rig.events() == []  # no focused.resumed, and the 8 s window starts over
+    [closed] = rig.records("episode_closed")
+    assert closed["number"] == 1 and closed["reason"] == "mac_sleep"
+    assert rig.records("attention")[-1]["state"] == "focused"
+    rig.run(9, person(), phone_in_hand=True)
+    assert rig.events() == ["phone_use.started"]
+    assert rig.records("episode_opened")[-1]["number"] == 2
+
+
 # ---------------------------------------------------------------- attention
 
 
