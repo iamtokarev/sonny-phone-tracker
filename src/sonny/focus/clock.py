@@ -11,9 +11,10 @@ the episode closes, and fired only while it is still open, of their kind and not
 `NudgeGuard` follows the episode and the Nudges given in it.
 
 Blind (spec §4, §9; `sonny.focus.failures` says when): session time runs on, but no hook fires; a hook that fell
-due fires once Blind ends, and a follow-up's time is frozen with its episode (its due time moves by the spell). If
-the end time passes while Blind, the session ends with `ended_while_blind` and no time's up. Session time runs
-through Mac sleep too (`awake_and_asleep`), so a session whose end passed during sleep ends `ended_during_sleep`.
+due fires once Blind ends, and a follow-up's time is frozen with its episode (its due time moves by the spell,
+and at least until the windows have had fresh frames to end the episode by). If the end time passes while
+Blind, the session ends with `ended_while_blind` and no time's up. Session time runs through Mac sleep too
+(`awake_and_asleep`), so a session whose end passed during sleep ends `ended_during_sleep`.
 """
 
 import time
@@ -350,9 +351,10 @@ class FocusClock:
             return 0.0
         spell = self._now() - s.blind_since
         s.blind = s.blind_since = None
+        fresh = self._elapsed_s(s) + max(self.cfg.phone_use.end_window_s, self.cfg.away.end_presence_s)
         for hook in s.hooks:
             if hook.episode is not None and hook.due_s is not None:
-                hook.due_s += spell
+                hook.due_s = max(hook.due_s + spell, fresh)  # judged on frames seen after the spell
         return spell
 
     def woke(self) -> bool:

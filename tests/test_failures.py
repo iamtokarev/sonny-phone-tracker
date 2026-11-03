@@ -299,3 +299,22 @@ def test_no_sleep_runs_caffeinate_tied_to_the_app_while_held():
     awake.hold(False)
     awake.hold(False)
     assert procs[0].terminated and len(procs) == 1
+
+
+def test_a_follow_up_due_right_after_a_spell_waits_for_fresh_frames(rig):
+    started(rig)
+    rig.bus.publish(Event(EventType.PHONE_USE_STARTED, {"episode": 1, "wakes": True, "excused": False}))
+    rig.advance(0.5)
+    rig.wakeups()
+    rig.clock.set_hook("phone_use.continuing", "again?", after_seconds=20)
+    rig.advance(19.5)
+    rig.link.down = "media_drop"
+    rig.advance(40)
+    rig.link.down = None
+    rig.advance(0.5)
+    rig.events()
+    fresh = max(CFG.phone_use.end_window_s, CFG.away.end_presence_s)
+    rig.advance(fresh - 1)  # without the wait it would fire 0.5 s after the spell, on frozen windows
+    assert "phone_use.continuing" not in [t for t, _ in rig.events()]
+    rig.advance(1.5)
+    assert "phone_use.continuing" in [t for t, _ in rig.events()]
