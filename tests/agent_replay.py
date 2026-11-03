@@ -20,6 +20,7 @@ from sonny.config import Config
 from sonny.events import EndReason, Event, EventBus, EventType
 from sonny.focus.clock import FocusClock
 from sonny.focus.conductor import Conductor, wakeup_payload
+from sonny.focus.failures import Failures
 from sonny.focus.nudges import AWAY_WAKES, NUDGE_WAKES, SPOKEN
 from sonny.focus.tools import SessionTools
 from sonny.session_log import SessionLog
@@ -74,6 +75,25 @@ class ScriptedTime:
         return self.t
 
 
+class ScriptedLink:
+    """The link watch and what Blind does to the vision worker and the Mac, on the scenario's word."""
+
+    def __init__(self) -> None:
+        self.down: str | None = None
+
+    def recheck(self) -> None:
+        pass
+
+    def set_blind(self, blind: bool) -> None:
+        pass
+
+    def reset_attention(self) -> None:
+        pass
+
+    def hold(self, on: bool) -> None:
+        pass
+
+
 class ScriptedAttention:
     """Attention events as the vision worker publishes them, on the scenario's word instead of the camera's.
 
@@ -110,7 +130,7 @@ class ScriptedAttention:
             self.start(self.state)
 
     def _publish(self, kind: EventType) -> None:
-        quiet = self._excused or self._clock.paused
+        quiet = self._excused or self._clock.paused or self._clock.blind
         data = {"episode": self._open, "wakes": not quiet, "excused": self._excused}
         self._bus.publish(Event(kind, data, self._now()))
 
@@ -139,7 +159,14 @@ class Replay:
             clock=self.time,
             on_failed_owner_turn=lambda: None,
         )
-        self.conducting = Conducting(self.clock, bus, conductor, self.conversation, busy=lambda: False)
+        self.link = ScriptedLink()
+        failures = Failures(
+            cfg, self.clock, self.link, self.link, bus, self.log, now=self.time, asleep=lambda: 0.0, awake=self.link
+        )
+        failures.say = lambda line: None
+        self.conducting = Conducting(
+            self.clock, bus, conductor, self.conversation, busy=lambda: False, before_tick=failures.step
+        )
         self.system = {"role": "system", "content": agent_prompt(cfg)}
         self.tool_specs = [{"type": "function", "function": f.to_default_dict()} for f in self.tools.schemas]
         self.wakeups: list[Wakeup] = []
@@ -182,6 +209,13 @@ class Replay:
 
     def back(self) -> None:
         self.attention.back()
+
+    def blind(self, seconds: float) -> None:
+        """The robot link is down for `seconds`, then back."""
+        self.link.down = "media_drop"
+        self.advance(seconds)
+        self.link.down = None
+        self.advance(1)
 
     def start_quietly(self, task: str, minutes: int) -> None:
         """A session that is already running, its session.started wake-up delivered."""
@@ -466,6 +500,27 @@ def sc_excuse_mid_phone_use(r: Replay) -> list[Check]:
     ]
 
 
+def sc_link_restored(r: Replay) -> list[Check]:
+    r.start_quietly("write the methods section", 45)
+    r.advance(120)
+    r.phone()
+    r.advance(5)
+    lost = r.time.t
+    r.blind(45)  # Sonny's Wi-Fi drops mid-episode
+    found = r.time.t
+    during = [w for w in r.wakeups if lost < w.t < found - 1]
+    restored = r.of("link.restored")
+    r.advance(60)
+    r.blind(10)  # a short spell is log-only
+    moves = [args for w in restored for args in w.ok_calls("play_emotion")]
+    return [
+        ("no wake-up while Blind", not during, str([w.event for w in during])),
+        ("link.restored woke the agent once", len(restored) == 1, str(len(restored))),
+        ("no Nudge move on link.restored", not moves, str(moves)),
+        ("no refused calls", not refused(r), "; ".join(refused(r))[:200]),
+    ]
+
+
 def sc_end_early_and_off_task(r: Replay) -> list[Check]:
     r.start_quietly("write the methods section", 45)
     r.advance(300)
@@ -492,6 +547,7 @@ SCENARIOS: dict[str, Callable[[Replay], list[Check]]] = {
     "phone-use": sc_phone_use,
     "away": sc_away,
     "excuse-mid-phone-use": sc_excuse_mid_phone_use,
+    "link-restored": sc_link_restored,
 }
 
 
