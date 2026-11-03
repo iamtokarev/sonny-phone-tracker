@@ -1,5 +1,6 @@
 import json
 import threading
+from typing import ClassVar
 
 import pytest
 
@@ -36,9 +37,32 @@ def robot(cfg, mini):
     return ReachyRobot(mini, QuietDaemon(), cfg.head.emotions_dataset)
 
 
+class FakeLink:
+    """The link watch: always up; remembers its lifecycle."""
+
+    down = None
+    calls: ClassVar[list[str]] = []
+
+    def __init__(self, *_args) -> None:
+        FakeLink.calls = []
+
+    def recheck(self) -> None:
+        pass
+
+    def start(self, stop) -> None:
+        FakeLink.calls.append("start")
+
+    def join(self, timeout) -> None:
+        FakeLink.calls.append("join" if not readers_stopped() else "join_late")
+
+
+def readers_stopped() -> bool:
+    return not readers_alive()
+
+
 @pytest.fixture
 def app(tmp_path):
-    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot)
+    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
 
 
 def speaker_up_after(fake: FakeMedia, seconds: float) -> None:
@@ -83,7 +107,7 @@ def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, capsys):
 
     cfg = dataclasses.replace(CFG, startup=dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.1))
     mini = FakeMini()
-    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot).run(mini, threading.Event())
+    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, threading.Event())
     out = capsys.readouterr().out
     assert "ready" not in out and "speaker" in out
     assert mini.calls[-1] == "goto_sleep"
@@ -146,3 +170,10 @@ def test_main_refuses_and_exits_before_connecting(monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == (
         "A dashboard app is running on Sonny: stop marionette in Sonny's dashboard first."
     )
+
+
+def test_the_link_watch_runs_from_ready_and_stops_before_the_readers(app):
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    app.run(mini, StopAfterReady())
+    assert FakeLink.calls == ["start", "join"]  # no reconnect can race the readers stopping
