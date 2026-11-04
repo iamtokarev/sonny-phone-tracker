@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:protocol": "node scripts/gen-protocol.mjs",
+    "check:protocol": "node scripts/gen-protocol.mjs --check"
   },
   "dependencies": {
     "react": "19.3.1",
@@ -17,6 +19,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.2.1",
+    "json-schema-to-typescript": "16.0.0",
     "typescript": "6.0.3",
     "vite": "8.3.5"
   }

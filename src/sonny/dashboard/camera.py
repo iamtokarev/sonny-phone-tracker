@@ -16,6 +16,7 @@
   second while watching and `camera_idle_fps` otherwise; a slow tab skips frames instead of queueing them.
 - **Encode only for watchers.** JPEGs are made only for a connected, unpaused client, off the event loop
   (`asyncio.to_thread`), once per frame however many tabs are open.
+- **Only the Dashboard's pages.** A handshake from another site's page closes with 1008 (`sonny.dashboard.origin`).
 - **Privacy.** The page sends the text message `{"type": "pause"}` (or closes the socket) and nothing more is
   encoded or sent to it until `{"type": "resume"}`. Sonny's watching is unchanged.
 """
@@ -34,6 +35,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from sonny.attention import AttentionState, Box, Detections
 from sonny.config import Dashboard
+from sonny.dashboard.origin import allowed_origin
 
 Encode = Callable[[np.ndarray, int, int, int], bytes]
 
@@ -102,7 +104,7 @@ class CameraFeed:
         app.add_api_websocket_route("/ws/camera", self.serve)
 
     async def serve(self, ws: WebSocket) -> None:
-        if not _allowed_origin(ws, self.cfg.port):
+        if not allowed_origin(ws, self.cfg):
             await ws.close(code=1008)  # policy violation: another site's page in the owner's browser
             return
         await ws.accept()
@@ -161,19 +163,6 @@ class CameraFeed:
                 header = json.dumps(frame.header).encode()
                 self._encoded = (frame.seq, struct.pack("<I", len(header)) + header + jpeg)
             return self._encoded[1]
-
-
-DEV_PORT = 5173  # the Vite dev server (spec §3), which proxies /ws to Sonny
-
-
-def _allowed_origin(ws: WebSocket, port: int) -> bool:
-    """Browsers let any site open a WebSocket to 127.0.0.1, so a browser's `Origin` must be the Dashboard's own
-    (or the Vite dev server's). No `Origin` at all is a local non-browser client, which no header check stops."""
-    origin = ws.headers.get("origin")
-    if origin is None:
-        return True
-    hosts = ("127.0.0.1", "localhost")
-    return origin in {f"http://{h}:{p}" for h in hosts for p in (port, DEV_PORT)}
 
 
 def _box(cls: str, b: Box) -> dict:

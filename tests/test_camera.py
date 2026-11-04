@@ -131,8 +131,8 @@ def test_outside_a_session_frames_go_raw_with_no_boxes():
     [
         f"http://127.0.0.1:{CFG.dashboard.port}",
         f"http://localhost:{CFG.dashboard.port}",
-        "http://127.0.0.1:5173",  # the Vite dev server
-        "http://localhost:5173",
+        f"http://127.0.0.1:{CFG.dashboard.dev_port}",  # the Vite dev server
+        f"http://localhost:{CFG.dashboard.dev_port}",
     ],
 )
 def test_the_dashboards_own_pages_may_watch(origin):

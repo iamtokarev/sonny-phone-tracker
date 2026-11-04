@@ -236,6 +236,9 @@ class Dashboard:
     camera_jpeg_quality: int
     camera_fps: float
     camera_idle_fps: float
+    dev_port: int
+    recent_max: int
+    health_every_s: float
 
 
 @dataclass(frozen=True)
