@@ -8,6 +8,10 @@ A desk robot that keeps its owner on task during a declared block of work, watch
 The owner's Reachy Mini robot, and the name it answers to.
 _Avoid_: the robot, Reachy (when meaning this specific unit)
 
+**Dashboard**:
+The browser page, served by Sonny on the owner's Mac, that shows the Focus Session, the Attention State, what Sonny is doing and what its camera sees. It only watches; the owner still drives Sonny by voice.
+_Avoid_: UI, web app, console, control panel
+
 **Wake Word**:
 The spoken phrase "Hey Sonny" that makes Sonny start listening.
 _Avoid_: hotword, trigger phrase
