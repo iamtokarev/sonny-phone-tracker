@@ -33,7 +33,9 @@ if (process.argv.includes("--check")) {
   let current = "";
   try {
     current = readFileSync(out, "utf8");
-  } catch {}
+  } catch {
+    // no file yet: it is stale
+  }
   if (current !== ts) {
     console.error("src/protocol.gen.ts is stale: run npm run gen:protocol");
     process.exit(1);
