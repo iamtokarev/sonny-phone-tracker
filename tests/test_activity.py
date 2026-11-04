@@ -115,3 +115,10 @@ def test_sonny_speaking_holds_events_however_long_the_line():
     feed(a, LLMFullResponseStartFrame(), LLMTextFrame("Once upon a time"), BotStartedSpeakingFrame())
     t.t = STUCK_S * 10
     assert a.busy
+
+
+def test_a_wake_up_beginning_is_reported():
+    begun: list[bool] = []
+    a = AgentActivity(STUCK_S, on_begin=lambda: begun.append(True))
+    a.begin()
+    assert begun == [True]

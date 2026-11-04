@@ -48,6 +48,7 @@ from sonny.voice.activity import ActivityTap, AgentActivity
 from sonny.voice.gate import MoveCue, MoveGate
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
 from sonny.voice.models import ParakeetSTT, load_wake_scorer, pocket_tts
+from sonny.voice.phase import AgentPhases
 from sonny.voice.prompt import agent_prompt
 from sonny.voice.transport import ReachyTransport
 from sonny.voice.turns import OwnerTurns, WakeSeen, WakeWordTurnStart
@@ -292,7 +293,7 @@ class VoicePipeline:
     def __init__(
         self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link, api_key: str
     ) -> None:
-        self.cfg = cfg
+        self.cfg, self.head = cfg, head
         self.clock = FocusClock(cfg, log, bus, on_nudge=lambda episode, i: self.vision.record_nudge(episode, i))
         self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
         self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
@@ -300,7 +301,9 @@ class VoicePipeline:
         conductor = Conductor(self.clock.snapshot, self.clock.nudges)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
         gate = MoveGate(head, cfg.head.move_poll_s)
-        self.activity = AgentActivity(cfg.conductor.stuck_after_s)
+        # The Dashboard's agent phase (its spec §6), logged so the page and a replayed log both see it.
+        self.phases = AgentPhases(lambda phase: (log.session or log.idle).write("agent.phase", phase=phase))
+        self.activity = AgentActivity(cfg.conductor.stuck_after_s, on_begin=self.phases.begin)
         self.conversation = Conversation(
             log,
             bus,
@@ -364,7 +367,7 @@ class VoicePipeline:
             conductor,
             self.conversation,
             busy=lambda: self.activity.busy or self.wake.in_turn or self.wake.bot_speaking,
-            on_free=lambda: head.settle(self.clock.running, self.wake.window_open or self.wake.in_turn),
+            on_free=self._on_free,
             before_tick=self.failures.step,
         )
         transport = ReachyTransport(hub, cfg.voice, cfg.tts)
@@ -389,7 +392,13 @@ class VoicePipeline:
             pipeline,
             params=PipelineParams(audio_in_sample_rate=rate, audio_out_sample_rate=hub.output_sample_rate),
             idle_timeout_secs=None,
+            observers=[self.phases],
         )
+
+    def _on_free(self) -> None:
+        """Nothing to deliver and the agent is free: the head may settle, and so may the agent phase."""
+        self.head.settle(self.clock.running, self.wake.window_open or self.wake.in_turn)
+        self.phases.settle(self.wake.window_open)
 
     async def run(self, stop: threading.Event, on_ready: Callable[[], None]) -> None:
         runner = WorkerRunner(handle_sigint=False)
