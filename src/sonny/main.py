@@ -18,6 +18,7 @@ from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
+from sonny.dashboard.camera import CameraFeed
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
 from sonny.link import LinkWatch, ReachyRepair
@@ -43,15 +44,17 @@ class Link(Protocol):
     def join(self, timeout: float) -> None: ...
 
 
-VoiceFactory = Callable[[Config, MediaHub, SessionLog, EventBus, HeadOwner, Link], VoiceLoop]
+VoiceFactory = Callable[[Config, MediaHub, SessionLog, EventBus, HeadOwner, Link, CameraFeed], VoiceLoop]
 RobotFactory = Callable[[Config, ReachyMini], Robot]
 LinkFactory = Callable[[Config, ReachyMini, MediaHub, HeadOwner, threading.Event, Callable[..., None]], Link]
 
 
-def make_voice(cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link) -> VoiceLoop:
+def make_voice(
+    cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link, camera: CameraFeed
+) -> VoiceLoop:
     from sonny.voice.pipeline import VoicePipeline  # loads Pipecat and the models only when the app runs
 
-    return VoicePipeline(cfg, hub, log, bus, head, link, api_key=os.environ[cfg.llm.api_key_env])
+    return VoicePipeline(cfg, hub, log, bus, head, link, camera, api_key=os.environ[cfg.llm.api_key_env])
 
 
 def make_robot(cfg: Config, mini: ReachyMini) -> Robot:
@@ -83,6 +86,9 @@ class Sonny(ReachyMiniApp):
         self.cfg = cfg
         self.bus = EventBus()
         self.log = log or SessionLog(cfg.log.dir)
+        self.camera = CameraFeed(cfg.dashboard)  # spec §5: filled by the vision worker, served at /ws/camera
+        if self.settings_app is not None:
+            self.camera.mount(self.settings_app)
         self._make_voice, self._make_robot, self._make_link = voice, robot, link
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event) -> None:
@@ -106,7 +112,7 @@ class Sonny(ReachyMiniApp):
                     )
                 return
             link.start(link_stop)  # spec §9: Blind and reconnects
-            voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link)
+            voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link, self.camera)
             asyncio.run(voice.run(stop_event, self._ready))
         finally:
             self._quit(head, hub, link, link_stop)
