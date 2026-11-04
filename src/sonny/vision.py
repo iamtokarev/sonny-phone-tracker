@@ -1,9 +1,10 @@
 """The vision worker (spec §2 "Vision worker", §3, §4, §5, §10): RF-DETR on the media hub's latest frame, feeding
 the attention rules and the framing rules of the Focus Session.
 
-- **When it watches.** Only while a session is running, Excuse included. It is off in a Pause (and the attention
-  windows freeze), outside a session and after time's up. It runs on each new frame once, so a video freeze
-  sends nothing and the state holds.
+- **When it watches.** Only while a session is running, Excuse included. It is off in a Pause and while Blind
+  (the attention windows freeze, not reset), outside a session and after time's up. It runs on each new frame
+  once, so a video freeze sends nothing and the state holds. After Mac sleep the windows start over and the open
+  episode closes, quietly (`reset_attention`).
 - **Head moves.** Each frame is flagged when the head owner says the head is moving; such frames count for
   nothing in either rule set. While a sweep runs, a sure `person` in `sweep.found_frames` frames in a row stops it.
 - **Out.** Attention events go on the bus, in the session log and as a terminal line, with the Attention State
@@ -84,6 +85,8 @@ class VisionWorker:
         self._framing: Framing | None = None
         self._summary: _Summary | None = None
         self._paused = self._excused = self._watching = False
+        self._blind = self._rules_blind = False  # Blind as the conductor says, and as the rules have it
+        self._reset = False  # the conductor asked for fresh windows (Mac sleep)
         self._frame_t = 0.0  # arrival time of the last frame detected
         self._finding = 0  # frames in a row with a person sure enough to stop a sweep
         self._thread: threading.Thread | None = None
@@ -123,7 +126,7 @@ class VisionWorker:
         """Follow the session, then detect the newest frame if it is new and the session is watched. Says
         whether a frame was detected."""
         self._follow_session()
-        watching = self._rules is not None and self._session.running and not self._paused
+        watching = self._rules is not None and self._session.running and not self._paused and not self._blind
         if self._watching and not watching:
             self._head.stop_framing()  # a Pause: a sweep goes back to the framing pose
         self._watching = watching
@@ -160,7 +163,7 @@ class VisionWorker:
         if number != self._number:
             self._number = number
             self._rules = self._framing = self._summary = None
-            self._paused = self._excused = False
+            self._paused = self._excused = self._rules_blind = self._reset = False
             if number is not None:
                 self._rules = AttentionRules(self.cfg, self._clock)
                 self._framing = Framing(self.cfg, self._clock)
@@ -176,6 +179,32 @@ class VisionWorker:
                 self._rules.start_excuse()
             else:
                 self._apply(lambda rules: rules.end_excuse())
+        if (blind := self._blind) != self._rules_blind:
+            self._rules_blind = blind
+            self._rules.set_blind(blind)
+        if self._reset:
+            self._reset = False
+            self._start_over()
+
+    def set_blind(self, blind: bool) -> None:
+        """Blind: frames are ignored and the windows freeze until it ends. Thread-safe (the next step applies it)."""
+        self._blind = blind
+
+    def reset_attention(self) -> None:
+        """The Mac woke from sleep: the windows start over and the open episode closes with no event. Thread-safe."""
+        self._reset = True
+
+    def _start_over(self) -> None:
+        rules = self._rules
+        assert rules is not None
+        with self._lock:
+            episode, state = rules.episode, rules.state
+            rules.reset()
+        self._framing = Framing(self.cfg, self._clock)
+        if episode is not None:
+            self._write("episode_closed", **_episode_fields(episode), reason="mac_sleep")
+        if rules.state != state:
+            self._write("attention", state=rules.state, was=state)
 
     def record_nudge(self, episode: int, intensity: str) -> None:
         """A Nudge Sonny gave in `episode`, for the rules' copy of it (the log's episode record). Thread-safe."""

@@ -128,3 +128,59 @@ def test_wait_speaker_ready_gives_up_on_stop():
     stop = threading.Event()
     stop.set()
     assert hub.wait_speaker_ready(stop) is False
+
+
+def test_audio_arrival_time_is_kept():
+    hub = MediaHub(FakeMini(FakeMedia(chunks=5)), CFG.media, CFG.startup)
+    assert hub.audio_t == 0.0
+    before = time.time()
+    hub.start()
+    deadline = time.monotonic() + 5
+    while hub.audio_chunks < 5 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    hub.stop()
+    assert hub.audio_t >= before
+
+
+def test_reconnect_replaces_the_media_session_and_waits_for_the_speaker():
+    old, new = FakeMedia(), FakeMedia(chunks=3, frames=3)
+    new.audio._appsrc = object()  # the new session's speaker link is up
+    mini = FakeMini(old)
+    hub = MediaHub(mini, CFG.media, CFG.startup, reopen=lambda: setattr(mini, "media", new))
+    q = hub.subscribe_audio()
+    hub.start()
+    assert hub.reconnect(threading.Event()) is True
+    assert "close" in old.calls and old.calls.index("close") > 0
+    assert mini.media is new and {"start_recording", "start_playing"} <= set(new.calls)
+    deadline = time.monotonic() + 5
+    while (hub.latest_frame()[0] is None or q.qsize() < 3) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    hub.stop()
+    assert hub.latest_frame()[0] is not None
+    assert q.qsize() == 3  # consumers keep their queues across a reconnect
+
+
+def test_reconnect_fails_when_the_new_speaker_link_never_comes_up():
+    mini = FakeMini(FakeMedia())
+    startup = dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.2, speaker_poll_s=0.01)
+    hub = MediaHub(mini, CFG.media, startup, reopen=lambda: setattr(mini, "media", FakeMedia()))
+    hub.start()
+    assert hub.reconnect(threading.Event()) is False
+    hub.stop()
+
+
+def test_nothing_is_pushed_to_the_speaker_while_reconnecting():
+    old = FakeMedia()
+    mini = FakeMini(old)
+    hub = MediaHub(mini, CFG.media, CFG.startup)
+
+    def reopen() -> None:
+        hub.play(np.zeros(160, np.float32))  # the voice keeps talking meanwhile
+        mini.media = FakeMedia()
+        mini.media.audio._appsrc = object()
+
+    hub._reopen = reopen
+    hub.start()
+    assert hub.reconnect(threading.Event())
+    hub.stop()
+    assert old.played == [] and mini.media.played == []

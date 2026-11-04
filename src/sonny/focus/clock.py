@@ -9,6 +9,12 @@ Follow-up hooks (`phone_use.continuing`, `away.continuing`) belong to the open D
 `followup.min_delay_s` out, one per episode (a new one replaces the old), outside the hook cap, cancelled when
 the episode closes, and fired only while it is still open, of their kind and not Excused. The session's
 `NudgeGuard` follows the episode and the Nudges given in it.
+
+Blind (spec §4, §9; `sonny.focus.failures` says when): session time runs on, but no hook fires; a hook that fell
+due fires once Blind ends, and a follow-up's time is frozen with its episode (its due time moves by the spell,
+and at least until the windows have had fresh frames to end the episode by). If the end time passes while
+Blind, the session ends with `ended_while_blind` and no time's up. Session time runs through Mac sleep too
+(`awake_and_asleep`), so a session whose end passed during sleep ends `ended_during_sleep`.
 """
 
 import time
@@ -21,6 +27,11 @@ from sonny.focus.nudges import FOLLOWUPS, NudgeGuard
 from sonny.session_log import SessionLog
 
 AGENT_HOOKS = (EventType.TIMER, EventType.SESSION_REMAINING, *FOLLOWUPS)
+
+
+def awake_and_asleep() -> float:
+    """Monotonic seconds that keep counting while the Mac sleeps (`time.monotonic` stops on macOS)."""
+    return time.clock_gettime(time.CLOCK_MONOTONIC)
 
 
 class Refused(Exception):
@@ -50,6 +61,8 @@ class Session:
     excuses: list[dict] = field(default_factory=list)
     hooks: list[Hook] = field(default_factory=list)
     next_hook: int = 1
+    blind: str | None = None  # why the session is Blind, if it is
+    blind_since: float | None = None  # clock time the spell started
 
 
 class FocusClock:
@@ -58,7 +71,7 @@ class FocusClock:
         cfg: Config,
         log: SessionLog,
         bus: EventBus,
-        now: Callable[[], float] = time.monotonic,
+        now: Callable[[], float] = awake_and_asleep,
         on_nudge: Callable[[int, str], None] = lambda number, intensity: None,
     ):
         self.cfg = cfg
@@ -68,7 +81,7 @@ class FocusClock:
         self.nudges = NudgeGuard(
             cfg,
             now,
-            quiet=lambda: self.excused or self.paused,
+            quiet=lambda: self.excused or self.paused or self.blind,
             on_close=self._end_followups,
             on_nudge=on_nudge,  # the episode's Nudge, for the vision worker's copy of it
             write=self._write,
@@ -96,6 +109,11 @@ class FocusClock:
         s = self._session
         return s is not None and s.excuse_until_s is not None
 
+    @property
+    def blind(self) -> bool:
+        s = self._session
+        return s is not None and s.blind is not None
+
     def _elapsed_s(self, s: Session) -> float:
         until = s.paused_since if s.paused_since is not None else self._now()
         return min(s.duration_s, until - s.started - s.paused_total_s)
@@ -118,6 +136,7 @@ class FocusClock:
             "elapsed_min": round(self._elapsed_s(s) / 60, 1),
             "remaining_min": round(self._remaining_s(s) / 60, 1),
             "paused": s.paused_since is not None,
+            "blind": s.blind is not None,
             "time_up": s.time_up_at is not None,
         }
         if s.time_up_at is not None:
@@ -318,6 +337,34 @@ class FocusClock:
         self._write("hook_cancelled", id=id)
         return {"cancelled": id}
 
+    # ---------------------------------------------------------------- failures
+
+    def set_blind(self, reason: str) -> None:
+        """A Blind spell starts in the running session."""
+        s = self._need_session()
+        s.blind, s.blind_since = reason, self._now()
+
+    def end_blind(self) -> float:
+        """The spell is over: follow-ups move on by its length, which is returned."""
+        s = self._session
+        if s is None or s.blind_since is None:
+            return 0.0
+        spell = self._now() - s.blind_since
+        s.blind = s.blind_since = None
+        fresh = self._elapsed_s(s) + max(self.cfg.phone_use.end_window_s, self.cfg.away.end_presence_s)
+        for hook in s.hooks:
+            if hook.episode is not None and hook.due_s is not None:
+                hook.due_s = max(hook.due_s + spell, fresh)  # judged on frames seen after the spell
+        return spell
+
+    def woke(self) -> bool:
+        """The Mac woke from sleep. A running session whose end time passed ends, silently; say whether it did."""
+        s = self._session
+        if s is None or s.time_up_at is not None or s.paused_since is not None or self._remaining_s(s) > 0:
+            return False
+        self._end(EndReason.ENDED_DURING_SLEEP)
+        return True
+
     # ---------------------------------------------------------------- time
 
     def tick(self) -> None:
@@ -335,7 +382,10 @@ class FocusClock:
                 self._end(EndReason.PAUSE_TIMEOUT)
             return
         elapsed, remaining = self._elapsed_s(s), self._remaining_s(s)
-        for hook in list(s.hooks):
+        if remaining <= 0 and s.blind is not None:
+            self._end(EndReason.ENDED_WHILE_BLIND)  # no time's up: Sonny couldn't see how it went
+            return
+        for hook in [] if s.blind is not None else list(s.hooks):
             if (hook.due_s is not None and elapsed >= hook.due_s) or (
                 hook.at_remaining_s is not None and remaining <= hook.at_remaining_s
             ):
@@ -359,6 +409,11 @@ class FocusClock:
     def _end(self, reason: EndReason) -> None:
         s = self._session
         assert s is not None
+        if s.blind_since is not None:
+            self._write(
+                "blind.ended", reason=s.blind, seconds=round(self._now() - s.blind_since, 1), session_ended=True
+            )
+            s.blind = s.blind_since = None
         for hook in s.hooks:
             self._write("hook_expired", id=hook.id)
         s.hooks.clear()

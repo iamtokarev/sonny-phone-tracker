@@ -19,6 +19,7 @@ from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
+from sonny.link import LinkWatch, ReachyRepair
 from sonny.media import MediaHub
 from sonny.robot import ReachyRobot
 from sonny.session_log import SessionLog
@@ -28,19 +29,37 @@ class VoiceLoop(Protocol):
     def run(self, stop: threading.Event, on_ready: Callable[[], None]) -> Coroutine[Any, Any, None]: ...
 
 
-VoiceFactory = Callable[[Config, MediaHub, SessionLog, EventBus, HeadOwner], VoiceLoop]
+class Link(Protocol):
+    """The link watch (`sonny.link.LinkWatch`)."""
+
+    @property
+    def down(self) -> str | None: ...
+    def recheck(self) -> None: ...
+    def start(self, stop: threading.Event) -> None: ...
+    def join(self, timeout: float) -> None: ...
+
+
+VoiceFactory = Callable[[Config, MediaHub, SessionLog, EventBus, HeadOwner, Link], VoiceLoop]
 RobotFactory = Callable[[Config, ReachyMini], Robot]
+LinkFactory = Callable[[Config, ReachyMini, MediaHub, HeadOwner, threading.Event, Callable[..., None]], Link]
 
 
-def make_voice(cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner) -> VoiceLoop:
+def make_voice(cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link) -> VoiceLoop:
     from sonny.voice.pipeline import VoicePipeline  # loads Pipecat and the models only when the app runs
 
-    return VoicePipeline(cfg, hub, log, bus, head, api_key=os.environ[cfg.llm.api_key_env])
+    return VoicePipeline(cfg, hub, log, bus, head, link, api_key=os.environ[cfg.llm.api_key_env])
 
 
 def make_robot(cfg: Config, mini: ReachyMini) -> Robot:
     daemon = DaemonClient(f"http://{cfg.robot.host}:{cfg.robot.port}", cfg.robot.http_timeout_s)
     return ReachyRobot(mini, daemon, cfg.head.emotions_dataset)
+
+
+def make_link(
+    cfg: Config, mini: ReachyMini, hub: MediaHub, head: HeadOwner, stop: threading.Event, write: Callable[..., None]
+) -> Link:
+    daemon = DaemonClient(f"http://{cfg.robot.host}:{cfg.robot.port}", cfg.robot.http_timeout_s)
+    return LinkWatch(cfg, hub, daemon, ReachyRepair(cfg, mini, hub, daemon, head, stop), write)
 
 
 class Sonny(ReachyMiniApp):
@@ -53,20 +72,23 @@ class Sonny(ReachyMiniApp):
         log: SessionLog | None = None,
         voice: VoiceFactory = make_voice,
         robot: RobotFactory = make_robot,
+        link: LinkFactory = make_link,
     ) -> None:
         super().__init__()
         self.cfg = cfg
         self.bus = EventBus()
         self.log = log or SessionLog(cfg.log.dir)
-        self._make_voice, self._make_robot = voice, robot
+        self._make_voice, self._make_robot, self._make_link = voice, robot, link
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event) -> None:
         hub = MediaHub(reachy_mini, self.cfg.media, self.cfg.startup)
-        head = HeadOwner(
-            self.cfg,
-            self._make_robot(self.cfg, reachy_mini),
-            lambda type, **f: (self.log.session or self.log.idle).write(type, **f),
-        )
+
+        def write(type: str, **fields) -> None:
+            (self.log.session or self.log.idle).write(type, **fields)
+
+        head = HeadOwner(self.cfg, self._make_robot(self.cfg, reachy_mini), write)
+        link_stop = threading.Event()
+        link = self._make_link(self.cfg, reachy_mini, hub, head, link_stop, write)
         try:
             reachy_mini.enable_motors()  # motors come up disabled after a daemon restart
             head.start()
@@ -78,15 +100,18 @@ class Sonny(ReachyMiniApp):
                         "restart the app."
                     )
                 return
-            voice = self._make_voice(self.cfg, hub, self.log, self.bus, head)
+            link.start(link_stop)  # spec §9: Blind and reconnects
+            voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link)
             asyncio.run(voice.run(stop_event, lambda: print("ready", flush=True)))
         finally:
-            self._quit(head, hub)
+            self._quit(head, hub, link, link_stop)
 
-    def _quit(self, head: HeadOwner, hub: MediaHub) -> None:
+    def _quit(self, head: HeadOwner, hub: MediaHub, link: Link, link_stop: threading.Event) -> None:
         """Spec §2 "Quit". Each step runs even if an earlier one fails, so the readers always
         stop before `ReachyMini` closes."""
         _step("end session log", lambda: self.log.end_session(EndReason.APP_QUIT))
+        link_stop.set()  # no reconnect from here on
+        _step("stop the link watch", lambda: link.join(self.cfg.media.reader_join_timeout_s))
         _step("stop tracking and go to sleep", head.quit)
         _step("stop media readers", hub.stop)
         _step("close log", self.log.close)

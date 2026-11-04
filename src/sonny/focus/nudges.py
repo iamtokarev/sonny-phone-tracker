@@ -66,7 +66,7 @@ class NudgeGuard:
         cfg: Config,
         now: Callable[[], float] = time.monotonic,
         *,
-        quiet: Callable[[], bool] = lambda: False,  # an Excuse or Pause is on
+        quiet: Callable[[], bool] = lambda: False,  # an Excuse, Pause or Blind is on
         on_close: Callable[[int], None] = lambda number: None,
         on_nudge: Callable[[int, str], None] = lambda number, intensity: None,
         write: Callable[..., None] = lambda type, **fields: None,
@@ -99,6 +99,12 @@ class NudgeGuard:
         elif event.type is EventType.FOCUSED_RESUMED:
             if self.episode is not None and self.episode.number == event.data["episode"]:
                 self._close(self.episode)
+
+    def close_episode(self) -> None:
+        """The open episode ends with no `focused.resumed` (the Mac woke from sleep): its follow-up goes too."""
+        if self.episode is not None:
+            self._write("episode_closed", number=self.episode.number, reason="mac_sleep")
+            self._close(self.episode)
 
     def _close(self, episode: Episode) -> None:
         episode.closed, self.episode = True, None
@@ -178,7 +184,7 @@ class NudgeGuard:
         if self.episode.kind != {**STARTED, **FOLLOWUPS}[kind]:
             return self._drop(kind, "the episode moved on")
         if self._quiet():
-            return self._drop(kind, "an Excuse or Pause")
+            return self._drop(kind, "an Excuse, Pause or Blind")
         if kind in AWAY_WAKES and self.away_capped:
             return self._drop(kind, "Away Nudge cap")
         if self.gap_left_s() > 0:

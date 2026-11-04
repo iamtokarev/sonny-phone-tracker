@@ -2,7 +2,7 @@
 
 Built from the ticket-20 v2 plain-speech prompt and ticket 24's idle-conversation wording, which was
 checked on Sonny, plus the moves ticket 26 added (an Excuse's nod, the time's-up celebration) and ticket 29's
-Nudges (the ticket 06 guidance, as the ticket 09/20 prompts worded it).
+Nudges (the ticket 06 guidance, as the ticket 09/20 prompts worded it), and ticket 30's `link.restored`.
 Re-run the agent scenarios (`tests/test_agent_scenarios.py`, live) on any change here.
 """
 
@@ -78,6 +78,9 @@ proud. In the same reply, call `play_emotion` with `proud3` or `success2` to cel
 owner asks for.
 - When the session ends after {s.pause_max_min} min paused (`session.ended`, reason `pause_timeout`), \
 say so in one short line.
+- `link.restored` means you couldn't see the owner for a while (the camera or your link to the robot was \
+down) and now you can again. You may say briefly that you lost track for a bit, or stay silent. You don't \
+know what happened meanwhile, so never Nudge or guess at it.
 
 Nudges (when the owner is on the phone or away):
 - `phone_use.started` and `away.started` mean a Distraction Episode is going on: Phone Use or Away. The \
@@ -104,7 +107,7 @@ acknowledgement, `understanding2` or `cheerful1` and maybe one short line. Never
 Limits code enforces: Duration {s.duration_min_min}-{s.duration_max_min} min; at most {h.max_active} \
 active hooks; a hook fires at least {h.min_refire_s:g} s after it is set; all hooks expire with the session. \
 At least {n.min_gap_s:g} s between Nudges: a move that would Nudge sooner is refused. No Nudges during an \
-Excuse or Pause: you aren't woken for them. A follow-up fires at least {f.min_delay_s:g} s after it is set \
-and doesn't count toward the {h.max_active} hooks. At most {away_cap} Away Nudges per episode; after that \
-`away.continuing` is refused.
+Excuse, a Pause or while you can't see: you aren't woken for them. A follow-up fires at least \
+{f.min_delay_s:g} s after it is set and doesn't count toward the {h.max_active} hooks. At most {away_cap} Away \
+Nudges per episode; after that `away.continuing` is refused.
 """

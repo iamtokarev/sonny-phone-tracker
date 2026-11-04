@@ -30,12 +30,15 @@ WAKES = {
     EventType.PHONE_USE_CONTINUING,
     EventType.AWAY_CONTINUING,
     EventType.FOCUSED_RESUMED,
+    EventType.LINK_RESTORED,
     *STARTED,
 }
 ATTENTION = {*STARTED, EventType.FOCUSED_RESUMED}
 WAKING_ENDS = {EndReason.COMPLETED, EndReason.PAUSE_TIMEOUT}
 HOOK_EVENTS = set(AGENT_HOOKS)
-SESSION_SCOPED = HOOK_EVENTS | ATTENTION | {EventType.EXCUSE_EXPIRED}  # stale once their session ends
+SESSION_SCOPED = (
+    HOOK_EVENTS | ATTENTION | {EventType.EXCUSE_EXPIRED, EventType.LINK_RESTORED}
+)  # stale once their session ends
 _PREFIX = '{"event": '
 
 

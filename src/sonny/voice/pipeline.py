@@ -38,6 +38,7 @@ from sonny.config import Config
 from sonny.events import Event, EventBus, EventType
 from sonny.focus.clock import FocusClock
 from sonny.focus.conductor import Conductor, wakeup_payload
+from sonny.focus.failures import Failures, Link
 from sonny.focus.tools import SessionTools
 from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
@@ -261,13 +262,16 @@ class Conducting:
         conversation: Conversation,
         busy: Callable[[], bool],
         on_free: Callable[[], None] = lambda: None,
+        before_tick: Callable[[], None] = lambda: None,
     ) -> None:
         self._clock, self._conductor, self._conversation, self._busy = clock, conductor, conversation, busy
         self._on_free = on_free  # nothing to deliver and the agent is free: the head may settle
+        self._before_tick = before_tick  # Blind spells and Mac sleep, ahead of the clock (`Failures.step`)
         self._events = bus.subscribe()
 
     def step(self) -> LLMStandardMessage | None:
         """The wake-up message to append to the context now, if any."""
+        self._before_tick()
         self._clock.tick()
         while not self._events.empty():
             self._conductor.offer(self._events.get_nowait())
@@ -286,12 +290,13 @@ class VoicePipeline:
     """Loads the models and builds the pipeline; `run()` holds conversations and Focus Sessions until stopped."""
 
     def __init__(
-        self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, api_key: str
+        self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link, api_key: str
     ) -> None:
         self.cfg = cfg
         self.clock = FocusClock(cfg, log, bus, on_nudge=lambda episode, i: self.vision.record_nudge(episode, i))
         self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
         self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
+        self.failures = Failures(cfg, self.clock, link, self.vision, bus, log)
         conductor = Conductor(self.clock.snapshot, self.clock.nudges)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
         gate = MoveGate(head, cfg.head.move_poll_s)
@@ -360,6 +365,7 @@ class VoicePipeline:
             self.conversation,
             busy=lambda: self.activity.busy or self.wake.in_turn or self.wake.bot_speaking,
             on_free=lambda: head.settle(self.clock.running, self.wake.window_open or self.wake.in_turn),
+            before_tick=self.failures.step,
         )
         transport = ReachyTransport(hub, cfg.voice, cfg.tts)
         pipeline = Pipeline(
@@ -414,3 +420,4 @@ class VoicePipeline:
                 task.cancel()
             vision_stop.set()
             self.vision.join(self.cfg.media.reader_join_timeout_s)
+            self.failures.release()

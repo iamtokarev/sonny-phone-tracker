@@ -111,3 +111,18 @@ def test_any_session_end_drops_the_queued_hooks_of_that_session():
     c.offer(Event(EventType.EXCUSE_EXPIRED, {"reason": "call"}))
     c.offer(Event(EventType.SESSION_ENDED, {"reason": EndReason.ENDED_BY_OWNER}))
     assert c.next_wakeup() is None
+
+
+def test_link_restored_wakes_the_agent_and_blind_spells_are_log_only():
+    c = conductor()
+    assert not c.offer(Event(EventType.BLIND_STARTED, {"reason": "media_drop"}))
+    assert not c.offer(Event(EventType.BLIND_ENDED, {"reason": "media_drop", "seconds": 45.0}))
+    assert c.offer(Event(EventType.LINK_RESTORED, {"seconds": 45.0}))
+    assert payloads(c) == [{"event": "link.restored", "seconds": 45.0, "state": SNAP}]
+
+
+def test_a_session_end_drops_a_queued_link_restored():
+    c = conductor()
+    c.offer(Event(EventType.LINK_RESTORED, {"seconds": 45.0}))
+    c.offer(Event(EventType.SESSION_ENDED, {"reason": EndReason.ENDED_BY_OWNER}))
+    assert c.next_wakeup() is None

@@ -67,6 +67,9 @@ class FakeMedia:
         self._call("get_frame")
         return next(self._frames, None)
 
+    def close(self) -> None:
+        self._call("close")
+
 
 class FakeMini:
     def __init__(self, media: FakeMedia | None = None) -> None:
