@@ -309,3 +309,61 @@ def test_quitting_with_the_page_open_does_not_hang(dashboard_app):
     app.stop()
     t.join(5)
     assert not t.is_alive()
+
+
+def test_quitting_with_the_state_feed_open_does_not_hang(dashboard_app):
+    from websockets.sync.client import connect
+
+    app, servers = dashboard_app
+    app.run = lambda mini, stop_event: stop_event.wait()
+    t = run_in_thread(app)
+    servers.wait_listening()
+    with connect(f"ws://127.0.0.1:{app.cfg.dashboard.port}/rpc") as ws:
+        ws.send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}}))
+        assert json.loads(ws.recv(timeout=5))["result"]["seq"] == 0
+        app.stop()
+        t.join(5)
+    assert not t.is_alive()
+
+
+def test_the_page_gets_what_sonny_logs_and_publishes_over_rpc(app):
+    from fastapi.testclient import TestClient
+
+    from sonny.events import Event, EventType
+
+    app.bus.publish(Event(EventType.LINK_RESTORED, {"seconds": 3.0}))  # before any page connects
+    with TestClient(app.settings_app) as client, client.websocket_connect("/rpc") as ws:
+        ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}})
+        snap = ws.receive_json()["result"]
+        assert [e["type"] for e in snap["recent"]] == ["link.restored"]
+        app.log.idle.write("wake", score=0.95)
+        notes = [ws.receive_json() for _ in range(2)]
+        # The snapshot sent the bus event out too; a page drops envelopes with seq <= snapshot.seq.
+        assert [(n["method"], n["params"]["seq"], n["params"]["type"]) for n in notes] == [
+            ("sonny.event", 1, "link.restored"),
+            ("sonny.event", 2, "wake"),
+        ]
+        assert snap["seq"] == 1
+
+
+def test_health_ticks_run_while_sonny_runs_and_stop_at_quit(tmp_path):
+    import dataclasses
+
+    cfg = dataclasses.replace(CFG, dashboard=dataclasses.replace(CFG.dashboard, health_every_s=0.01))
+    app = Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
+    ticks: list[dict] = []
+    app.feed.listen(lambda e: e["type"] == "health" and ticks.append(e["data"]))
+
+    class StopAfterTicks(threading.Event):
+        def wait(self, timeout=None):
+            if timeout is None:
+                while len(ticks) < 2:
+                    time.sleep(0.01)
+                self.set()
+            return super().wait(timeout)
+
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    app.run(mini, StopAfterTicks())
+    assert ticks[-1]["down"] is None
+    assert not any(t.name == "sonny-dashboard-health" and t.is_alive() for t in threading.enumerate())

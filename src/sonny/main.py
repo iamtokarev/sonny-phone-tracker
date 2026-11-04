@@ -18,6 +18,8 @@ from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
+from sonny.dashboard.feed import Readings, UiFeed
+from sonny.dashboard.rpc import mount_feed
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
 from sonny.link import LinkWatch, ReachyRepair
@@ -84,6 +86,12 @@ class Sonny(ReachyMiniApp):
         self.bus = EventBus()
         self.log = log or SessionLog(cfg.log.dir)
         self._make_voice, self._make_robot, self._make_link = voice, robot, link
+        # The Dashboard's state feed (spec §4): every log record and bus event, served on /rpc.
+        self.feed = UiFeed(cfg.dashboard, self.bus)
+        self.log.on_record = self.feed.on_record
+        if self.settings_app is not None:
+            mount_feed(self.settings_app, self.feed)
+        self._health: threading.Thread | None = None
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event) -> None:
         hub = MediaHub(reachy_mini, self.cfg.media, self.cfg.startup)
@@ -106,6 +114,9 @@ class Sonny(ReachyMiniApp):
                     )
                 return
             link.start(link_stop)  # spec §9: Blind and reconnects
+            self._health = self.feed.run_health(
+                link_stop, lambda: Readings(link.down, hub.frames, hub.latest_frame()[1] or None)
+            )
             voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link)
             asyncio.run(voice.run(stop_event, self._ready))
         finally:
@@ -124,8 +135,10 @@ class Sonny(ReachyMiniApp):
         """Spec §2 "Quit". Each step runs even if an earlier one fails, so the readers always
         stop before `ReachyMini` closes."""
         _step("end session log", lambda: self.log.end_session(EndReason.APP_QUIT))
-        link_stop.set()  # no reconnect from here on
+        link_stop.set()  # no reconnect and no Dashboard health tick from here on
         _step("stop the link watch", lambda: link.join(self.cfg.media.reader_join_timeout_s))
+        if (health := self._health) is not None:
+            _step("stop the Dashboard health tick", lambda: health.join(self.cfg.media.reader_join_timeout_s))
         _step("stop tracking and go to sleep", head.quit)
         _step("stop media readers", hub.stop)
         _step("close log", self.log.close)
