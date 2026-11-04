@@ -231,6 +231,8 @@ class Dashboard:
     host: str
     port: int
     open_browser: bool
+    recent_max: int
+    health_every_s: float
 
 
 @dataclass(frozen=True)

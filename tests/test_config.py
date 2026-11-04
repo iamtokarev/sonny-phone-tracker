@@ -29,6 +29,7 @@ def test_defaults_match_spec():
     assert (cfg.hooks.max_active, cfg.hooks.min_refire_s) == (5, 60)
     assert cfg.media.audio_sample_rate == 16000
     assert (cfg.dashboard.host, cfg.dashboard.port, cfg.dashboard.open_browser) == ("127.0.0.1", 8042, False)
+    assert (cfg.dashboard.recent_max, cfg.dashboard.health_every_s) == (500, 1.0)
 
 
 def test_every_file_key_reaches_the_typed_object():

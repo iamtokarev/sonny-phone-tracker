@@ -157,3 +157,5 @@ motors_check_s = 5  # how often an idle head owner asks the daemon whether the m
 host = "127.0.0.1"
 port = 8042
 open_browser = false  # true opens a browser tab on the Dashboard once Sonny is ready
+recent_max = 500  # envelopes `sonny.snapshot` hands a page that connects (its `recent`)
+health_every_s = 1.0  # how often the state feed sends a `health` envelope (link, fps, detect ms, lag, LLM s)
