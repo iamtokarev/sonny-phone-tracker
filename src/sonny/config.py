@@ -231,6 +231,7 @@ class Dashboard:
     host: str
     port: int
     open_browser: bool
+    dev_port: int
     recent_max: int
     health_every_s: float
 
