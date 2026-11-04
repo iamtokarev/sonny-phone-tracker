@@ -28,6 +28,7 @@ def test_defaults_match_spec():
     assert (cfg.session.duration_min_min, cfg.session.duration_max_min) == (5, 120)
     assert (cfg.hooks.max_active, cfg.hooks.min_refire_s) == (5, 60)
     assert cfg.media.audio_sample_rate == 16000
+    assert (cfg.dashboard.host, cfg.dashboard.port, cfg.dashboard.open_browser) == ("127.0.0.1", 8042, False)
 
 
 def test_every_file_key_reaches_the_typed_object():
@@ -76,4 +77,10 @@ def test_wrong_type_is_rejected(tmp_path):
 def test_bool_is_not_a_number(tmp_path):
     path = write_config(tmp_path, lambda s: s.replace("volume = 62", "volume = true"))
     with pytest.raises(ConfigError, match=r"robot\.volume"):
+        load_config(path)
+
+
+def test_bool_fields_take_only_booleans(tmp_path):
+    path = write_config(tmp_path, lambda s: s.replace("open_browser = false", "open_browser = 0"))
+    with pytest.raises(ConfigError, match=r"dashboard\.open_browser"):
         load_config(path)

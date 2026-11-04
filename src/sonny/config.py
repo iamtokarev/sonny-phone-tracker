@@ -227,6 +227,13 @@ class Head:
 
 
 @dataclass(frozen=True)
+class Dashboard:
+    host: str
+    port: int
+    open_browser: bool
+
+
+@dataclass(frozen=True)
 class Config:
     robot: Robot
     startup: Startup
@@ -256,6 +263,7 @@ class Config:
     conductor: Conductor
     idle: Idle
     head: Head
+    dashboard: Dashboard
 
 
 def load_config(path: Path | str | None = None) -> Config:
@@ -288,6 +296,6 @@ def _build(cls: type, table: dict[str, Any], path: Path, prefix: str) -> Any:
 
 
 def _coerce(kind: type, value: Any, path: Path, key: str) -> Any:
-    if isinstance(value, bool) or not isinstance(value, (kind, int) if kind is float else kind):
+    if (isinstance(value, bool) and kind is not bool) or not isinstance(value, (kind, int) if kind is float else kind):
         raise ConfigError(f"{path}: {key} must be {kind.__name__}, got {value!r}")
     return float(value) if kind is float else value
