@@ -1,5 +1,8 @@
+import http.client
 import json
+import socket
 import threading
+import time
 from typing import ClassVar
 
 import pytest
@@ -177,3 +180,132 @@ def test_the_link_watch_runs_from_ready_and_stops_before_the_readers(app):
     speaker_up_after(mini.media, 0.05)
     app.run(mini, StopAfterReady())
     assert FakeLink.calls == ["start", "join"]  # no reconnect can race the readers stopping
+
+
+def test_without_a_dashboard_build_sonny_still_starts_and_says_so(app, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(main_mod, "STATIC_DIR", tmp_path / "static")  # never built
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    app.run(mini, StopAfterReady())
+    out = capsys.readouterr().out
+    assert "ready" in out
+    assert "Dashboard not built (run npm run build in web/)" in out
+    assert "Dashboard: http" not in out
+
+
+@pytest.fixture
+def built(monkeypatch, tmp_path):
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "index.html").write_text("<!doctype html><title>Sonny</title>")
+    monkeypatch.setattr(main_mod, "STATIC_DIR", static)
+
+
+@pytest.mark.parametrize("open_browser", [False, True])
+def test_on_ready_sonny_prints_the_dashboard_url_and_opens_a_tab_only_if_asked(
+    built, open_browser, monkeypatch, tmp_path, capsys
+):
+    import dataclasses
+
+    cfg = dataclasses.replace(CFG, dashboard=dataclasses.replace(CFG.dashboard, open_browser=open_browser))
+    opened: list[str] = []
+    monkeypatch.setattr(main_mod.webbrowser, "open", opened.append)
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, StopAfterReady())
+    assert "Dashboard: http://127.0.0.1:8042" in capsys.readouterr().out.splitlines()
+    assert opened == (["http://127.0.0.1:8042"] if open_browser else [])
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class Servers:
+    """Records the uvicorn servers the base class starts, so a test can see where they listen."""
+
+    started: ClassVar[list] = []
+
+    def __init__(self, monkeypatch) -> None:
+        import uvicorn
+
+        Servers.started = []
+
+        class Recording(uvicorn.Server):
+            def __init__(self, config) -> None:
+                super().__init__(config)
+                Servers.started.append(self)
+
+        monkeypatch.setattr(uvicorn, "Server", Recording)
+
+    @staticmethod
+    def wait_listening(timeout: float = 5) -> list[tuple]:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if Servers.started and Servers.started[0].started:
+                return [sock.getsockname()[:2] for srv in Servers.started[0].servers for sock in srv.sockets]
+            time.sleep(0.02)
+        pytest.fail("the Dashboard server never came up")
+
+
+@pytest.fixture
+def dashboard_app(monkeypatch, tmp_path):
+    """A Sonny on a free port whose `run` is replaced by the test; `wrapped_run` is real except for the robot."""
+    import contextlib
+    import dataclasses
+
+    import reachy_mini.apps.app as base
+
+    monkeypatch.setattr(base, "ReachyMini", lambda *a, **k: contextlib.nullcontext(FakeMini()))
+    servers = Servers(monkeypatch)
+    cfg = dataclasses.replace(CFG, dashboard=dataclasses.replace(CFG.dashboard, port=free_port()))
+    app = Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
+    return app, servers
+
+
+def run_in_thread(app) -> threading.Thread:
+    t = threading.Thread(target=app.wrapped_run, daemon=True)
+    t.start()
+    return t
+
+
+def test_the_dashboard_listens_on_127_0_0_1_at_the_configured_port_and_stops_with_stop_event(dashboard_app):
+    app, servers = dashboard_app
+    seen: list = []
+
+    def run(mini, stop_event) -> None:
+        seen.append(servers.wait_listening())
+        stop_event.wait()
+
+    app.run = run
+    t = run_in_thread(app)
+    deadline = time.monotonic() + 5
+    while not seen and time.monotonic() < deadline:
+        time.sleep(0.02)
+    app.stop()
+    t.join(5)
+    assert not t.is_alive()
+    assert seen == [[("127.0.0.1", app.cfg.dashboard.port)]]
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", app.cfg.dashboard.port), timeout=0.5)
+
+
+def test_quitting_with_the_page_open_does_not_hang(dashboard_app):
+    app, servers = dashboard_app
+
+    def run(mini, stop_event) -> None:
+        servers.wait_listening()
+        page = http.client.HTTPConnection("127.0.0.1", app.cfg.dashboard.port, timeout=5)
+        page.request("GET", "/")
+        page.getresponse().read()  # the tab keeps its keep-alive connection open
+        stop_event.wait()
+
+    app.run = run
+    t = run_in_thread(app)
+    servers.wait_listening()
+    time.sleep(0.2)
+    app.stop()
+    t.join(5)
+    assert not t.is_alive()

@@ -8,6 +8,7 @@ import fcntl
 import os
 import sys
 import threading
+import webbrowser
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import IO, Any, Protocol
@@ -23,6 +24,9 @@ from sonny.link import LinkWatch, ReachyRepair
 from sonny.media import MediaHub
 from sonny.robot import ReachyRobot
 from sonny.session_log import SessionLog
+
+# The built Dashboard (`npm run build` in web/). The base class serves this same folder: <app module dir>/static.
+STATIC_DIR = Path(__file__).with_name("static")
 
 
 class VoiceLoop(Protocol):
@@ -63,7 +67,6 @@ def make_link(
 
 
 class Sonny(ReachyMiniApp):
-    custom_app_url: str | None = None  # no settings page, no web server
     request_media_backend: str | None = None
 
     def __init__(
@@ -74,6 +77,8 @@ class Sonny(ReachyMiniApp):
         robot: RobotFactory = make_robot,
         link: LinkFactory = make_link,
     ) -> None:
+        # Read by the base class, which serves STATIC_DIR on it in a thread that stops with stop_event (spec §2).
+        self.custom_app_url = f"http://{cfg.dashboard.host}:{cfg.dashboard.port}"
         super().__init__()
         self.cfg = cfg
         self.bus = EventBus()
@@ -102,9 +107,18 @@ class Sonny(ReachyMiniApp):
                 return
             link.start(link_stop)  # spec §9: Blind and reconnects
             voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link)
-            asyncio.run(voice.run(stop_event, lambda: print("ready", flush=True)))
+            asyncio.run(voice.run(stop_event, self._ready))
         finally:
             self._quit(head, hub, link, link_stop)
+
+    def _ready(self) -> None:
+        print("ready", flush=True)
+        if not (STATIC_DIR / "index.html").exists():
+            print("Dashboard not built (run npm run build in web/)", flush=True)
+            return
+        print(f"Dashboard: {self.custom_app_url}", flush=True)
+        if self.cfg.dashboard.open_browser:
+            webbrowser.open(self.custom_app_url)
 
     def _quit(self, head: HeadOwner, hub: MediaHub, link: Link, link_stop: threading.Event) -> None:
         """Spec §2 "Quit". Each step runs even if an earlier one fails, so the readers always
