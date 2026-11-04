@@ -43,7 +43,7 @@ from sonny.focus.tools import SessionTools
 from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
-from sonny.vision import VisionWorker
+from sonny.vision import Camera, VisionWorker
 from sonny.voice.activity import ActivityTap, AgentActivity
 from sonny.voice.gate import MoveCue, MoveGate
 from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
@@ -291,11 +291,19 @@ class VoicePipeline:
     """Loads the models and builds the pipeline; `run()` holds conversations and Focus Sessions until stopped."""
 
     def __init__(
-        self, cfg: Config, hub: MediaHub, log: SessionLog, bus: EventBus, head: HeadOwner, link: Link, api_key: str
+        self,
+        cfg: Config,
+        hub: MediaHub,
+        log: SessionLog,
+        bus: EventBus,
+        head: HeadOwner,
+        link: Link,
+        camera: Camera | None,
+        api_key: str,
     ) -> None:
         self.cfg, self.head = cfg, head
         self.clock = FocusClock(cfg, log, bus, on_nudge=lambda episode, i: self.vision.record_nudge(episode, i))
-        self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log)
+        self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log, camera=camera)
         self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
         self.failures = Failures(cfg, self.clock, link, self.vision, bus, log)
         conductor = Conductor(self.clock.snapshot, self.clock.nudges)

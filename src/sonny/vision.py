@@ -11,6 +11,9 @@ the attention rules and the framing rules of the Focus Session.
   transitions and each Distraction Episode's open and close. Nothing here decides what wakes the agent (the
   conductor does). Framing moves go to the head owner, which may decline them while another move plays. Once a
   second, a detection summary goes to the log: what later tuning of every threshold reads.
+- **The Dashboard's camera.** Each new frame goes to the camera feed (`sonny.dashboard.camera`): a detected frame
+  with its Detections and the Attention State it left; when not watching, the raw frame alone. The detector never
+  runs just for the page.
 """
 
 import dataclasses
@@ -22,7 +25,7 @@ from typing import Protocol
 
 import numpy as np
 
-from sonny.attention import AttentionRules, Detections, Episode
+from sonny.attention import AttentionRules, AttentionState, Detections, Episode
 from sonny.config import Config
 from sonny.detector import Detector, load_detector
 from sonny.events import Event, EventBus
@@ -51,6 +54,18 @@ class Head(Protocol):
     def stop_framing(self) -> None: ...
 
 
+class Camera(Protocol):
+    """The Dashboard's camera feed (`sonny.dashboard.camera.CameraFeed`)."""
+
+    def offer(
+        self,
+        image: np.ndarray,
+        t: float,
+        detections: Detections | None = None,
+        attention: AttentionState | None = None,
+    ) -> None: ...
+
+
 class SessionState(Protocol):
     """The session clock as the worker reads it (`sonny.focus.clock.FocusClock`)."""
 
@@ -75,11 +90,14 @@ class VisionWorker:
         log: SessionLog,
         detector: Detector | None = None,
         clock: Callable[[], float] = time.time,
+        camera: Camera | None = None,
     ) -> None:
         self.cfg = cfg
         self._frames, self._head, self._session, self._bus, self._log = frames, head, session, bus, log
         self.detector = detector  # `load()` loads it when not given
         self._clock = clock  # wall time, like the attention rules and `Event.t`
+        self._camera = camera
+        self._offered_t = 0.0  # arrival time of the last frame offered to the camera feed
         self._number: int | None = None  # the session the rules below belong to
         self._rules: AttentionRules | None = None
         self._framing: Framing | None = None
@@ -130,9 +148,12 @@ class VisionWorker:
         if self._watching and not watching:
             self._head.stop_framing()  # a Pause: a sweep goes back to the framing pose
         self._watching = watching
-        if not watching:
-            return False
         frame, t = self._frames.latest_frame()
+        if not watching:
+            if self._camera is not None and frame is not None and t != self._offered_t:
+                self._offered_t = t
+                self._camera.offer(frame, t)  # the page still sees the room; the detector stays off
+            return False
         if frame is None or t == self._frame_t:
             return False
         self._frame_t = t
@@ -150,6 +171,9 @@ class VisionWorker:
         else:
             self._finding = 0
         self._apply(lambda rules: rules.observe(d))
+        if self._camera is not None:
+            self._offered_t = t
+            self._camera.offer(frame, t, d, self._rules.state)  # the state this frame left the rules in
         move = self._framing.observe(d)
         if move is not None:
             started_move = self._head.reframe(move.yaw_deg) if isinstance(move, Reframe) else self._head.sweep()

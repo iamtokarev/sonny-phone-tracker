@@ -231,6 +231,11 @@ class Dashboard:
     host: str
     port: int
     open_browser: bool
+    camera_width: int
+    camera_height: int
+    camera_jpeg_quality: int
+    camera_fps: float
+    camera_idle_fps: float
     dev_port: int
     recent_max: int
     health_every_s: float

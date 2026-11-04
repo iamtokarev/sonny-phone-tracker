@@ -399,3 +399,51 @@ def test_a_detection_summary_is_logged_once_a_second(rig):
     assert busy["phone_motion"] == pytest.approx(15 / W, abs=1e-4)
     assert busy["frames"] == FPS and busy["detected"] == FPS and busy["head_moving"] is False
     assert busy["detect_ms"] >= 0
+
+
+# ---------------------------------------------------------------- the Dashboard's camera feed
+
+
+class Camera:
+    """The Dashboard's camera feed (`sonny.dashboard.camera.CameraFeed`): remembers what it was offered."""
+
+    def __init__(self) -> None:
+        self.offers: list[tuple] = []
+
+    def offer(self, image, t, detections=None, attention=None) -> None:
+        self.offers.append((image, t, detections, attention))
+
+
+@pytest.fixture
+def camera(rig):
+    rig.camera = Camera()
+    rig.worker = VisionWorker(
+        CFG, rig.frames, rig.head, rig.session, rig.bus, rig.log, rig.detector, clock=rig.clock, camera=rig.camera
+    )
+    return rig.camera
+
+
+def test_each_detected_frame_goes_to_the_camera_feed_with_its_boxes_and_the_attention_state(rig, camera):
+    rig.run(1, person())
+    rig.run(4, person(), phone_in_hand=True)
+    assert len(camera.offers) == rig.detector.calls == 5 * FPS
+    image, t, d, attention = camera.offers[-1]
+    assert image is rig.frames._frame and t == rig.frames._t
+    assert d.phone == phone(4 * FPS - 1) and d.person == person()  # the boxes the rules read for that frame
+    assert attention == "phone_use"
+
+
+def test_outside_a_session_raw_frames_go_to_the_camera_feed_without_detecting(rig, camera):
+    rig.session.number = None
+    rig.run(1, person())
+    assert rig.detector.calls == 0
+    assert len(camera.offers) == FPS  # every new frame; the feed paces them
+    assert {(d, a) for _, _, d, a in camera.offers} == {(None, None)}
+
+
+def test_a_frozen_stream_is_not_offered_twice(rig, camera):
+    rig.session.number = None
+    rig.run(1 / FPS)
+    rig.frames.frozen = True
+    rig.run(1)
+    assert len(camera.offers) == 1
