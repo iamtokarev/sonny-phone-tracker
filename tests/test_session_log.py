@@ -76,3 +76,23 @@ def test_a_session_ended_with_its_file_kept_open_logs_one_end(tmp_path):
         ("tool_call", None),
     ]
     assert log.session is None
+
+
+def test_every_written_record_reaches_the_tap_as_logged(tmp_path):
+    seen = []
+    log = SessionLog(tmp_path, on_record=seen.append)
+    log.idle.write("wake", score=0.9)
+    writer = log.start_session()
+    writer.write_event(Event(EventType.SESSION_ENDED, {"reason": EndReason.COMPLETED}))
+    assert seen == records(tmp_path / "idle.jsonl") + records(writer.path)
+    assert seen[1]["reason"] == "completed"  # the JSON form, as the file holds it
+
+
+def test_a_failing_tap_does_not_stop_the_log(tmp_path):
+    def broken(record):
+        raise RuntimeError("feed down")
+
+    log = SessionLog(tmp_path, on_record=broken)
+    log.idle.write("wake", score=0.9)
+    log.idle.write("wake", score=0.95)
+    assert [r["score"] for r in records(tmp_path / "idle.jsonl")] == [0.9, 0.95]

@@ -152,3 +152,16 @@ move_timeout_s = 30  # a move still running after this is stopped
 line_wait_s = 20  # a move waits at most this long for the line before it to be spoken
 cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops making others busy
 motors_check_s = 5  # how often an idle head owner asks the daemon whether the motors are up (play_emotion: unavailable)
+
+[dashboard]  # the live page Sonny serves while it runs (ADR 0005), always on 127.0.0.1, never the LAN
+port = 8042
+open_browser = false  # true opens a browser tab on the Dashboard once Sonny is ready
+# /ws/camera (spec §5): frames scaled to fit camera_width x camera_height, as JPEG, only while a tab watches
+camera_width = 960
+camera_height = 540
+camera_jpeg_quality = 75
+camera_fps = 15  # most frames a second per tab in a Focus Session
+camera_idle_fps = 5  # outside a session (or in a Pause): raw frames, no boxes
+dev_port = 5173  # the Vite dev server (web/), whose pages may also open Sonny's sockets; any other site may not
+recent_max = 500  # envelopes `sonny.snapshot` hands a page that connects (its `recent`)
+health_every_s = 1.0  # how often the state feed sends a `health` envelope (link, fps, detect ms, lag, LLM s)

@@ -1,0 +1,1111 @@
+{
+  "recent_max": 3,
+  "envelopes": [
+    {
+      "seq": 1,
+      "t": 1000.0,
+      "type": "session.started",
+      "data": {
+        "task": "Write the report",
+        "duration_min": 25
+      }
+    },
+    {
+      "seq": 2,
+      "t": 1030.0,
+      "type": "attention",
+      "data": {
+        "state": "phone_use",
+        "was": "focused"
+      }
+    },
+    {
+      "seq": 3,
+      "t": 1030.0,
+      "type": "episode_opened",
+      "data": {
+        "number": 1,
+        "kind": "phone_use"
+      }
+    },
+    {
+      "seq": 4,
+      "t": 1045.0,
+      "type": "nudge",
+      "data": {
+        "wakeup": "phone_use.continuing",
+        "intensity": "subtle",
+        "episode": 1
+      }
+    },
+    {
+      "seq": 5,
+      "t": 1046.0,
+      "type": "agent.phase",
+      "data": {
+        "phase": "speaking"
+      }
+    },
+    {
+      "seq": 6,
+      "t": 1050.0,
+      "type": "agent.phase",
+      "data": {
+        "phase": "idle"
+      }
+    },
+    {
+      "seq": 7,
+      "t": 1080.0,
+      "type": "attention",
+      "data": {
+        "state": "away",
+        "was": "phone_use"
+      }
+    },
+    {
+      "seq": 8,
+      "t": 1150.0,
+      "type": "nudge",
+      "data": {
+        "wakeup": "away.continuing",
+        "intensity": "firm",
+        "episode": 1
+      }
+    },
+    {
+      "seq": 9,
+      "t": 1200.0,
+      "type": "attention",
+      "data": {
+        "state": "focused",
+        "was": "away"
+      }
+    },
+    {
+      "seq": 10,
+      "t": 1200.0,
+      "type": "episode_closed",
+      "data": {
+        "number": 1,
+        "kind": "away",
+        "seconds": 170.0,
+        "included_away": true,
+        "nudges": [
+          "subtle",
+          "firm"
+        ],
+        "away_nudges": 1
+      }
+    },
+    {
+      "seq": 11,
+      "t": 1300.0,
+      "type": "tool_call",
+      "data": {
+        "name": "pause",
+        "args": {},
+        "result": {
+          "paused": true
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "t": 1420.0,
+      "type": "tool_call",
+      "data": {
+        "name": "resume",
+        "args": {},
+        "result": {
+          "resumed": true,
+          "remaining_min": 16.7
+        }
+      }
+    },
+    {
+      "seq": 13,
+      "t": 1500.0,
+      "type": "blind.started",
+      "data": {
+        "reason": "robot_stream_stalled"
+      }
+    },
+    {
+      "seq": 14,
+      "t": 1510.0,
+      "type": "reconnect",
+      "data": {
+        "ok": true,
+        "attempt": 1,
+        "error": null
+      }
+    },
+    {
+      "seq": 15,
+      "t": 1520.0,
+      "type": "blind.ended",
+      "data": {
+        "reason": "robot_stream_stalled",
+        "seconds": 20.0,
+        "session_ended": false
+      }
+    },
+    {
+      "seq": 16,
+      "t": 1530.0,
+      "type": "detections",
+      "data": {
+        "phone_conf": null,
+        "person_conf": 0.93,
+        "frames": 15,
+        "detected": 15,
+        "detect_ms": 21.5
+      }
+    },
+    {
+      "seq": 17,
+      "t": 1540.0,
+      "type": "llm_call",
+      "data": {
+        "model": "anthropic/claude-haiku-5.5",
+        "ok": true,
+        "latency_s": 1.2,
+        "first_text_s": 0.4,
+        "attempts": 1,
+        "error": null
+      }
+    },
+    {
+      "seq": 18,
+      "t": 1600.0,
+      "type": "tool_call",
+      "data": {
+        "name": "extend",
+        "args": {
+          "minutes": 10
+        },
+        "result": {
+          "extended_by_min": 10
+        }
+      }
+    },
+    {
+      "seq": 19,
+      "t": 3220.0,
+      "type": "session.ended",
+      "data": {
+        "reason": "completed"
+      }
+    },
+    {
+      "seq": 20,
+      "t": 3260.0,
+      "type": "tool_call",
+      "data": {
+        "name": "extend",
+        "args": {
+          "minutes": 5
+        },
+        "result": {
+          "extended_by_min": 5,
+          "continued": true
+        }
+      }
+    },
+    {
+      "seq": 21,
+      "t": 3261.0,
+      "type": "attention",
+      "data": {
+        "state": "focused",
+        "was": "focused"
+      }
+    },
+    {
+      "seq": 22,
+      "t": 3400.0,
+      "type": "session.ended",
+      "data": {
+        "reason": "ended_by_owner"
+      }
+    }
+  ],
+  "initial": {
+    "seq": 0,
+    "session": null,
+    "attention": null,
+    "episode": null,
+    "agent": {
+      "phase": "idle"
+    },
+    "link": {
+      "down": null,
+      "camera_fps": null,
+      "detect_ms": null,
+      "stream_lag_s": null,
+      "llm_latency_s": null,
+      "reconnects": 0,
+      "blind_spells": 0
+    },
+    "recent": [],
+    "recent_max": 3
+  },
+  "expected": {
+    "1": {
+      "seq": 1,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 1,
+          "t": 1000.0,
+          "type": "session.started",
+          "data": {
+            "task": "Write the report",
+            "duration_min": 25
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "4": {
+      "seq": 4,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "phone_use",
+      "episode": {
+        "number": 1,
+        "kind": "phone_use",
+        "started_at": 1030.0,
+        "nudges": [
+          "subtle"
+        ]
+      },
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 2,
+          "t": 1030.0,
+          "type": "attention",
+          "data": {
+            "state": "phone_use",
+            "was": "focused"
+          }
+        },
+        {
+          "seq": 3,
+          "t": 1030.0,
+          "type": "episode_opened",
+          "data": {
+            "number": 1,
+            "kind": "phone_use"
+          }
+        },
+        {
+          "seq": 4,
+          "t": 1045.0,
+          "type": "nudge",
+          "data": {
+            "wakeup": "phone_use.continuing",
+            "intensity": "subtle",
+            "episode": 1
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "5": {
+      "seq": 5,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "phone_use",
+      "episode": {
+        "number": 1,
+        "kind": "phone_use",
+        "started_at": 1030.0,
+        "nudges": [
+          "subtle"
+        ]
+      },
+      "agent": {
+        "phase": "speaking"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 3,
+          "t": 1030.0,
+          "type": "episode_opened",
+          "data": {
+            "number": 1,
+            "kind": "phone_use"
+          }
+        },
+        {
+          "seq": 4,
+          "t": 1045.0,
+          "type": "nudge",
+          "data": {
+            "wakeup": "phone_use.continuing",
+            "intensity": "subtle",
+            "episode": 1
+          }
+        },
+        {
+          "seq": 5,
+          "t": 1046.0,
+          "type": "agent.phase",
+          "data": {
+            "phase": "speaking"
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "7": {
+      "seq": 7,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "away",
+      "episode": {
+        "number": 1,
+        "kind": "away",
+        "started_at": 1030.0,
+        "nudges": [
+          "subtle"
+        ]
+      },
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 5,
+          "t": 1046.0,
+          "type": "agent.phase",
+          "data": {
+            "phase": "speaking"
+          }
+        },
+        {
+          "seq": 6,
+          "t": 1050.0,
+          "type": "agent.phase",
+          "data": {
+            "phase": "idle"
+          }
+        },
+        {
+          "seq": 7,
+          "t": 1080.0,
+          "type": "attention",
+          "data": {
+            "state": "away",
+            "was": "phone_use"
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "10": {
+      "seq": 10,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 8,
+          "t": 1150.0,
+          "type": "nudge",
+          "data": {
+            "wakeup": "away.continuing",
+            "intensity": "firm",
+            "episode": 1
+          }
+        },
+        {
+          "seq": 9,
+          "t": 1200.0,
+          "type": "attention",
+          "data": {
+            "state": "focused",
+            "was": "away"
+          }
+        },
+        {
+          "seq": 10,
+          "t": 1200.0,
+          "type": "episode_closed",
+          "data": {
+            "number": 1,
+            "kind": "away",
+            "seconds": 170.0,
+            "included_away": true,
+            "nudges": [
+              "subtle",
+              "firm"
+            ],
+            "away_nudges": 1
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "11": {
+      "seq": 11,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": 1300.0,
+        "paused_total_s": 0.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 9,
+          "t": 1200.0,
+          "type": "attention",
+          "data": {
+            "state": "focused",
+            "was": "away"
+          }
+        },
+        {
+          "seq": 10,
+          "t": 1200.0,
+          "type": "episode_closed",
+          "data": {
+            "number": 1,
+            "kind": "away",
+            "seconds": 170.0,
+            "included_away": true,
+            "nudges": [
+              "subtle",
+              "firm"
+            ],
+            "away_nudges": 1
+          }
+        },
+        {
+          "seq": 11,
+          "t": 1300.0,
+          "type": "tool_call",
+          "data": {
+            "name": "pause",
+            "args": {},
+            "result": {
+              "paused": true
+            }
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "12": {
+      "seq": 12,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 0
+      },
+      "recent": [
+        {
+          "seq": 10,
+          "t": 1200.0,
+          "type": "episode_closed",
+          "data": {
+            "number": 1,
+            "kind": "away",
+            "seconds": 170.0,
+            "included_away": true,
+            "nudges": [
+              "subtle",
+              "firm"
+            ],
+            "away_nudges": 1
+          }
+        },
+        {
+          "seq": 11,
+          "t": 1300.0,
+          "type": "tool_call",
+          "data": {
+            "name": "pause",
+            "args": {},
+            "result": {
+              "paused": true
+            }
+          }
+        },
+        {
+          "seq": 12,
+          "t": 1420.0,
+          "type": "tool_call",
+          "data": {
+            "name": "resume",
+            "args": {},
+            "result": {
+              "resumed": true,
+              "remaining_min": 16.7
+            }
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "13": {
+      "seq": 13,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": null,
+        "blind": "robot_stream_stalled"
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 0,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 11,
+          "t": 1300.0,
+          "type": "tool_call",
+          "data": {
+            "name": "pause",
+            "args": {},
+            "result": {
+              "paused": true
+            }
+          }
+        },
+        {
+          "seq": 12,
+          "t": 1420.0,
+          "type": "tool_call",
+          "data": {
+            "name": "resume",
+            "args": {},
+            "result": {
+              "resumed": true,
+              "remaining_min": 16.7
+            }
+          }
+        },
+        {
+          "seq": 13,
+          "t": 1500.0,
+          "type": "blind.started",
+          "data": {
+            "reason": "robot_stream_stalled"
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "15": {
+      "seq": 15,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": null,
+        "stream_lag_s": null,
+        "llm_latency_s": null,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 13,
+          "t": 1500.0,
+          "type": "blind.started",
+          "data": {
+            "reason": "robot_stream_stalled"
+          }
+        },
+        {
+          "seq": 14,
+          "t": 1510.0,
+          "type": "reconnect",
+          "data": {
+            "ok": true,
+            "attempt": 1,
+            "error": null
+          }
+        },
+        {
+          "seq": 15,
+          "t": 1520.0,
+          "type": "blind.ended",
+          "data": {
+            "reason": "robot_stream_stalled",
+            "seconds": 20.0,
+            "session_ended": false
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "17": {
+      "seq": 17,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 1500.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": 21.5,
+        "stream_lag_s": null,
+        "llm_latency_s": 1.2,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 15,
+          "t": 1520.0,
+          "type": "blind.ended",
+          "data": {
+            "reason": "robot_stream_stalled",
+            "seconds": 20.0,
+            "session_ended": false
+          }
+        },
+        {
+          "seq": 16,
+          "t": 1530.0,
+          "type": "detections",
+          "data": {
+            "phone_conf": null,
+            "person_conf": 0.93,
+            "frames": 15,
+            "detected": 15,
+            "detect_ms": 21.5
+          }
+        },
+        {
+          "seq": 17,
+          "t": 1540.0,
+          "type": "llm_call",
+          "data": {
+            "model": "anthropic/claude-haiku-5.5",
+            "ok": true,
+            "latency_s": 1.2,
+            "first_text_s": 0.4,
+            "attempts": 1,
+            "error": null
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "18": {
+      "seq": 18,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 2100.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": 21.5,
+        "stream_lag_s": null,
+        "llm_latency_s": 1.2,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 16,
+          "t": 1530.0,
+          "type": "detections",
+          "data": {
+            "phone_conf": null,
+            "person_conf": 0.93,
+            "frames": 15,
+            "detected": 15,
+            "detect_ms": 21.5
+          }
+        },
+        {
+          "seq": 17,
+          "t": 1540.0,
+          "type": "llm_call",
+          "data": {
+            "model": "anthropic/claude-haiku-5.5",
+            "ok": true,
+            "latency_s": 1.2,
+            "first_text_s": 0.4,
+            "attempts": 1,
+            "error": null
+          }
+        },
+        {
+          "seq": 18,
+          "t": 1600.0,
+          "type": "tool_call",
+          "data": {
+            "name": "extend",
+            "args": {
+              "minutes": 10
+            },
+            "result": {
+              "extended_by_min": 10
+            }
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "19": {
+      "seq": 19,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 2100.0,
+        "paused_since": null,
+        "paused_total_s": 120.0,
+        "time_up_at": 3220.0,
+        "blind": null
+      },
+      "attention": null,
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": 21.5,
+        "stream_lag_s": null,
+        "llm_latency_s": 1.2,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 17,
+          "t": 1540.0,
+          "type": "llm_call",
+          "data": {
+            "model": "anthropic/claude-haiku-5.5",
+            "ok": true,
+            "latency_s": 1.2,
+            "first_text_s": 0.4,
+            "attempts": 1,
+            "error": null
+          }
+        },
+        {
+          "seq": 18,
+          "t": 1600.0,
+          "type": "tool_call",
+          "data": {
+            "name": "extend",
+            "args": {
+              "minutes": 10
+            },
+            "result": {
+              "extended_by_min": 10
+            }
+          }
+        },
+        {
+          "seq": 19,
+          "t": 3220.0,
+          "type": "session.ended",
+          "data": {
+            "reason": "completed"
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "21": {
+      "seq": 21,
+      "session": {
+        "task": "Write the report",
+        "started_at": 1000.0,
+        "duration_s": 2400.0,
+        "paused_since": null,
+        "paused_total_s": 160.0,
+        "time_up_at": null,
+        "blind": null
+      },
+      "attention": "focused",
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": 21.5,
+        "stream_lag_s": null,
+        "llm_latency_s": 1.2,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 19,
+          "t": 3220.0,
+          "type": "session.ended",
+          "data": {
+            "reason": "completed"
+          }
+        },
+        {
+          "seq": 20,
+          "t": 3260.0,
+          "type": "tool_call",
+          "data": {
+            "name": "extend",
+            "args": {
+              "minutes": 5
+            },
+            "result": {
+              "extended_by_min": 5,
+              "continued": true
+            }
+          }
+        },
+        {
+          "seq": 21,
+          "t": 3261.0,
+          "type": "attention",
+          "data": {
+            "state": "focused",
+            "was": "focused"
+          }
+        }
+      ],
+      "recent_max": 3
+    },
+    "22": {
+      "seq": 22,
+      "session": null,
+      "attention": null,
+      "episode": null,
+      "agent": {
+        "phase": "idle"
+      },
+      "link": {
+        "down": null,
+        "camera_fps": null,
+        "detect_ms": 21.5,
+        "stream_lag_s": null,
+        "llm_latency_s": 1.2,
+        "reconnects": 1,
+        "blind_spells": 1
+      },
+      "recent": [
+        {
+          "seq": 20,
+          "t": 3260.0,
+          "type": "tool_call",
+          "data": {
+            "name": "extend",
+            "args": {
+              "minutes": 5
+            },
+            "result": {
+              "extended_by_min": 5,
+              "continued": true
+            }
+          }
+        },
+        {
+          "seq": 21,
+          "t": 3261.0,
+          "type": "attention",
+          "data": {
+            "state": "focused",
+            "was": "focused"
+          }
+        },
+        {
+          "seq": 22,
+          "t": 3400.0,
+          "type": "session.ended",
+          "data": {
+            "reason": "ended_by_owner"
+          }
+        }
+      ],
+      "recent_max": 3
+    }
+  }
+}

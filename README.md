@@ -25,6 +25,11 @@ Session ("Hey Sonny, let's work on my slides for 25 minutes"); in a session you 
 time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctrl-C puts Sonny in
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
+The Dashboard is a page Sonny serves on this Mac while it runs. Build it once with
+`npm ci && npm run build` in `web/` (it writes to the git-ignored `src/sonny/static/`); after `ready`
+Sonny prints `Dashboard: http://127.0.0.1:8042`. Set `open_browser = true` under `[dashboard]` in
+`src/sonny/sonny.toml` to have it open a tab.
+
 Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
 level and still in a Focus Session, with tracking stopped before the session starts. In a session
 Sonny watches through its camera (not in a Pause) and keeps its body facing you with the head
@@ -55,3 +60,18 @@ SONNY_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
 ```
 
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
+
+### Dashboard without the robot
+
+`sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
+LLM: it replays session logs as the state feed and fills the camera feed. Next to `npm run dev` in
+`web/` (http://127.0.0.1:5173/static/, which proxies `/rpc` and `/ws` to it):
+
+```bash
+uv run sonny-dashboard-dev --log logs/session-*.jsonl --speed 10   # replays the logs in order, then loops
+uv run sonny-dashboard-dev --log logs/session-20261103-*.jsonl --webcam  # Mac webcam through the detector
+```
+
+Without `--webcam` (or `--clip video.mp4`) the camera shows a drawn placeholder scene whose boxes
+follow the replayed Attention State. `--speed N` plays N times faster and shortens the session's
+Duration to match, so the page's timer runs out with the replay.

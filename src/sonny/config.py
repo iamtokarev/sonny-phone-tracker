@@ -227,6 +227,20 @@ class Head:
 
 
 @dataclass(frozen=True)
+class Dashboard:
+    port: int  # on 127.0.0.1 only (`sonny.dashboard.origin.HOST`, ADR 0005): no key can change the host
+    open_browser: bool
+    camera_width: int
+    camera_height: int
+    camera_jpeg_quality: int
+    camera_fps: float
+    camera_idle_fps: float
+    dev_port: int
+    recent_max: int
+    health_every_s: float
+
+
+@dataclass(frozen=True)
 class Config:
     robot: Robot
     startup: Startup
@@ -256,6 +270,7 @@ class Config:
     conductor: Conductor
     idle: Idle
     head: Head
+    dashboard: Dashboard
 
 
 def load_config(path: Path | str | None = None) -> Config:
@@ -288,6 +303,6 @@ def _build(cls: type, table: dict[str, Any], path: Path, prefix: str) -> Any:
 
 
 def _coerce(kind: type, value: Any, path: Path, key: str) -> Any:
-    if isinstance(value, bool) or not isinstance(value, (kind, int) if kind is float else kind):
+    if (isinstance(value, bool) and kind is not bool) or not isinstance(value, (kind, int) if kind is float else kind):
         raise ConfigError(f"{path}: {key} must be {kind.__name__}, got {value!r}")
     return float(value) if kind is float else value

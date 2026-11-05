@@ -1,0 +1,253 @@
+/* Board 02b, Raw Brutalist calm. Values from spec §9 via tokens.css. */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ---- header ---- */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.brand {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 20px;
+  padding: 6px 12px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+}
+
+.status[data-problem] .dot {
+  background: var(--accent);
+}
+
+.status[data-blink] .dot {
+  animation: blink 0.5s steps(1) infinite;
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+/* ---- task, timer, strip ---- */
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.timer {
+  font-family: var(--font-display);
+  font-size: var(--timer-size);
+  line-height: 0.8;
+  letter-spacing: var(--timer-tracking);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  transition: color 0.5s;
+}
+
+.timer[data-scene="resting"],
+.timer[data-scene="ended"] {
+  color: var(--idle);
+}
+
+/* Away dims the timer; muted keeps it well over 3:1 for large text. */
+.timer[data-scene="away"] {
+  color: var(--muted);
+}
+
+.strip {
+  position: relative;
+  height: 26px;
+  margin-top: 8px;
+  border: var(--rule) solid var(--ink);
+}
+
+.segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.segment[data-state="focused"] {
+  background: var(--ink);
+}
+
+.segment[data-state="phone_use"] {
+  background: var(--accent);
+}
+
+.segment[data-state="away"] {
+  background: repeating-linear-gradient(45deg, var(--ink) 0 2px, var(--paper) 2px 7px);
+}
+
+.segment[data-state="blind"] {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 2px, var(--paper) 2px 4px);
+}
+
+.nudge {
+  position: absolute;
+  top: -24px;
+  transform: translateX(-50%);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* ---- the three blocks ---- */
+
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--rule);
+  background: var(--ink);
+  border: var(--rule) solid var(--ink);
+}
+
+.attention {
+  grid-column: span 4;
+  min-height: 200px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  background: var(--ink);
+  color: var(--paper);
+  transition:
+    background-color 0.5s,
+    color 0.5s;
+}
+
+.attention[data-scene="resting"],
+.attention[data-scene="ended"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.attention[data-scene="phone_use"] {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.attention[data-scene="away"] {
+  background: var(--paper);
+  color: var(--ink);
+  outline: var(--rule) dashed var(--ink);
+  outline-offset: -10px;
+}
+
+/* Blind: striped; the words sit on paper so they stay readable. */
+.attention[data-scene="blind"] {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
+  color: var(--ink);
+}
+
+.attention[data-scene="blind"] .label,
+.attention[data-scene="blind"] .stateWord > span,
+.attention[data-scene="blind"] .episode {
+  background: var(--paper);
+  padding: 2px 6px;
+  align-self: flex-start;
+}
+
+.label {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.stateWord {
+  font-family: var(--font-display);
+  font-size: var(--state-size);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.episode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.ladder {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.rung {
+  width: 14px;
+  height: 14px;
+  border: var(--rule-list) solid currentColor;
+}
+
+.rung[data-on] {
+  background: currentColor;
+}
+
+/* Step 3 is the accent, except on the accent itself (Phone Use), where it stays ink. */
+.rung[data-on][data-top] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.attention[data-scene="phone_use"] .rung[data-on][data-top] {
+  background: currentColor;
+  border-color: currentColor;
+}
+
+.hint {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status[data-blink] .dot {
+    animation: none;
+  }
+  .timer,
+  .attention {
+    transition: none;
+  }
+}
