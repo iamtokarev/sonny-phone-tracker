@@ -1,12 +1,12 @@
 """The Dashboard without the robot (spec §10): `uv run sonny-dashboard-dev`, next to `npm run dev` in web/.
 
 The same FastAPI routes Sonny serves (the base class's `/` and `/static`, `/rpc`, `/ws/camera`) on the same port,
-the same `UiFeed` and `CameraFeed`, fed by:
+the same `DashboardFeed` and `CameraFeed`, fed by:
 
-- **a replayer** over session logs (`--log logs/session-*.jsonl`): each file's records go to `UiFeed.on_record`
+- **a replayer** over session logs (`--log logs/session-*.jsonl`): each file's records go to `DashboardFeed.on_record`
   in order, as Sonny's log tap would hand them over, at `--speed` times the logged pace; several files play one
   after another, and the last one loops back to the first. Each record is stamped with the time it goes out, and
-  a session's `duration_min` (and an extend's `extended_by_min`) is divided by the speed, so the page's timer
+  a session's `duration_min` (and an extend's `extended_by_min`) is divided by the speed, so the page's clock
   runs out when the replayed session does;
 - **a camera source**: the Mac webcam (`--webcam`) or a video file (`--clip`), through the real detector while
   the replayed session is watched (always, with no `--log`), raw frames otherwise, as the vision worker does; or,
@@ -34,7 +34,7 @@ import sonny.main
 from sonny.attention import AttentionState, Box, Detections
 from sonny.config import Config, load_config
 from sonny.dashboard.camera import CameraFeed
-from sonny.dashboard.feed import Readings, UiFeed
+from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.rpc import mount_feed
 
 Record = dict[str, Any]
@@ -153,7 +153,7 @@ class CameraLoop:
     def __init__(
         self,
         cfg: Config,
-        feed: UiFeed,
+        feed: DashboardFeed,
         camera: CameraFeed,
         capture: cv2.VideoCapture | None,  # the webcam or a clip, opened; None for the placeholder
         always_watch: bool,
@@ -233,11 +233,11 @@ class _Routes(ReachyMiniApp):
         raise NotImplementedError
 
 
-def build_app(cfg: Config) -> tuple[FastAPI, UiFeed, CameraFeed]:
+def build_app(cfg: Config) -> tuple[FastAPI, DashboardFeed, CameraFeed]:
     """Sonny's Dashboard routes with a feed and a camera of their own."""
     app = _Routes(cfg).settings_app
     assert app is not None
-    feed, camera = UiFeed(cfg.dashboard), CameraFeed(cfg.dashboard)
+    feed, camera = DashboardFeed(cfg.dashboard), CameraFeed(cfg.dashboard)
     camera.mount(app)
     mount_feed(app, feed)
     return app, feed, camera

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sonny.attention import AttentionState
 from sonny.config import load_config
 from sonny.dashboard.dev import Replayer, build_app, placeholder_frame
-from sonny.dashboard.feed import UiFeed
+from sonny.dashboard.feed import DashboardFeed
 from tests.test_dashboard_feed import recorded_logs
 
 CFG = load_config().dashboard
@@ -65,7 +65,7 @@ def test_the_replayer_emits_the_logs_records_in_order_with_timing_scaled_by_spee
     assert [r["ts"] for _, r in emitted] == pytest.approx([start + o / speed for o in offsets])
 
 
-def test_a_sped_up_session_keeps_its_timer_in_step_with_the_replay(tmp_path):
+def test_a_sped_up_session_keeps_its_clock_in_step_with_the_replay(tmp_path):
     emitted, _ = replay([write_log(tmp_path / "session.jsonl", RECORDS)], speed=10.0)
     assert emitted[0][1]["duration_min"] == pytest.approx(1.0)  # 10 min at 10x
 
@@ -88,7 +88,7 @@ def test_several_logs_play_one_after_another_each_on_its_own_timing(tmp_path):
 
 
 def test_the_replayed_log_drives_the_feeds_snapshot(tmp_path):
-    feed = UiFeed(CFG)
+    feed = DashboardFeed(CFG)
     time = FakeTime()
     path = write_log(tmp_path / "session.jsonl", RECORDS[:2])
     Replayer([path], 1.0, feed.on_record, clock=time.clock, sleep=time.sleep).run(loops=1)
@@ -100,7 +100,7 @@ def test_the_replayed_log_drives_the_feeds_snapshot(tmp_path):
 
 @pytest.mark.skipif(SESSION_LOG is None, reason="the 2026-11-03 session log lives only in the main checkout")
 def test_the_2026_11_03_log_takes_the_feed_through_focused_phone_use_and_resting():
-    feed = UiFeed(CFG)
+    feed = DashboardFeed(CFG)
     time = FakeTime()
     states = []
 

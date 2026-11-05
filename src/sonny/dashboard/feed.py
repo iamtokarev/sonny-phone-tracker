@@ -1,4 +1,4 @@
-"""The Dashboard's state feed (spec §4): one `UiFeed` turns everything Sonny logs or publishes into envelopes.
+"""The Dashboard's state feed (spec §4): one `DashboardFeed` turns everything Sonny logs or publishes into envelopes.
 
 An envelope is `{seq, t, type, data}`: `type` is the log record's or `EventType`'s string verbatim, `t` its epoch
 time, `data` the rest of the record; `seq` rises by one per envelope for the run. Sources:
@@ -9,7 +9,7 @@ time, `data` the rest of the record; `seq` rises by one per envelope for the run
 - a `health` envelope every `health_every_s` (`run_health`): link state, camera fps, detect ms, stream lag,
   last LLM latency, reconnects and Blind spells.
 
-`snapshot()` is what a page applies on connect: the session (raw times, so the page ticks the timer itself),
+`snapshot()` is what a page applies on connect: the session (raw times, so the page ticks the time remaining itself),
 the Attention State, the open Distraction Episode, the agent phase, the latest health, and the last
 `recent_max` envelopes. Health ticks are not kept in `recent`; the snapshot carries the latest one.
 """
@@ -44,7 +44,7 @@ class Readings:
     frame_t: float | None = None  # epoch time of the newest camera frame
 
 
-class UiFeed:
+class DashboardFeed:
     def __init__(self, cfg: Dashboard, bus: EventBus | None = None, now: Callable[[], float] = time.time) -> None:
         self.cfg = cfg
         self._now = now

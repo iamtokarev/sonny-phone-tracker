@@ -1,4 +1,4 @@
-"""The Dashboard's state feed (spec §4): `UiFeed` turns log records, bus events and health ticks into envelopes."""
+"""The Dashboard's state feed (spec §4): `DashboardFeed` turns records, bus events and health ticks into envelopes."""
 
 import json
 import subprocess
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sonny.config import load_config
-from sonny.dashboard.feed import UiFeed
+from sonny.dashboard.feed import DashboardFeed
 from sonny.events import Event, EventBus, EventType
 from sonny.session_log import SessionLog
 
@@ -29,8 +29,8 @@ def read(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
-def feed_with_sink(**kw) -> tuple[UiFeed, list[dict]]:
-    feed = UiFeed(CFG, **kw)
+def feed_with_sink(**kw) -> tuple[DashboardFeed, list[dict]]:
+    feed = DashboardFeed(CFG, **kw)
     sent: list[dict] = []
     feed.listen(sent.append)
     return feed, sent
@@ -71,7 +71,7 @@ SESSION = [
 
 
 def snapshot_after(n: int, **kw) -> dict:
-    feed = UiFeed(CFG, **kw)
+    feed = DashboardFeed(CFG, **kw)
     for record in SESSION[:n]:
         feed.on_record(record)
     return feed.snapshot()
@@ -122,7 +122,7 @@ def test_once_focused_again_and_after_the_end_the_snapshot_follows():
 def test_recent_holds_the_last_envelopes_up_to_recent_max():
     import dataclasses
 
-    feed = UiFeed(dataclasses.replace(CFG, recent_max=3))
+    feed = DashboardFeed(dataclasses.replace(CFG, recent_max=3))
     for record in SESSION[:5]:
         feed.on_record(record)
     assert [e["seq"] for e in feed.snapshot()["recent"]] == [3, 4, 5]
@@ -130,7 +130,7 @@ def test_recent_holds_the_last_envelopes_up_to_recent_max():
 
 def test_bus_events_published_while_no_page_is_connected_still_land_in_recent():
     bus = EventBus()
-    feed = UiFeed(CFG, bus=bus)
+    feed = DashboardFeed(CFG, bus=bus)
     bus.publish(Event(EventType.LINK_RESTORED, {"seconds": 12.0}, t=50.0))
     recent = feed.snapshot()["recent"]
     assert recent == [{"seq": 1, "t": 50.0, "type": "link.restored", "data": {"seconds": 12.0}}]

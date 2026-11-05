@@ -17,7 +17,7 @@ from pipecat.observers.base_observer import FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 
 from sonny.config import load_config
-from sonny.dashboard.feed import UiFeed
+from sonny.dashboard.feed import DashboardFeed
 from sonny.dashboard.protocol import Envelope
 from sonny.session_log import SessionLog
 from sonny.voice.phase import AgentPhases
@@ -104,7 +104,7 @@ def test_a_silent_reply_settles_to_idle():
 
 
 def test_logged_phases_reach_the_dashboard_feed_and_its_snapshot(tmp_path):
-    feed = UiFeed(load_config().dashboard)
+    feed = DashboardFeed(load_config().dashboard)
     log = SessionLog(tmp_path, on_record=feed.on_record)
     p = AgentPhases(lambda phase: log.idle.write("agent.phase", phase=phase))
     push(p, UserStartedSpeakingFrame())

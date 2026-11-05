@@ -19,7 +19,7 @@ from reachy_mini import ReachyMini, ReachyMiniApp
 from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
 from sonny.dashboard.camera import CameraFeed
-from sonny.dashboard.feed import Readings, UiFeed
+from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.rpc import mount_feed
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
@@ -93,7 +93,7 @@ class Sonny(ReachyMiniApp):
             self.camera.mount(self.settings_app)
         self._make_voice, self._make_robot, self._make_link = voice, robot, link
         # The Dashboard's state feed (spec §4): every log record and bus event, served on /rpc.
-        self.feed = UiFeed(cfg.dashboard, self.bus)
+        self.feed = DashboardFeed(cfg.dashboard, self.bus)
         self.log.on_record = self.feed.on_record
         if self.settings_app is not None:
             mount_feed(self.settings_app, self.feed)

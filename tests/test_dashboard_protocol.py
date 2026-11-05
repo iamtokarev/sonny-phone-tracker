@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sonny.dashboard.feed import Readings, UiFeed
+from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.protocol import Envelope, Snapshot, envelope_types, schema_hash
 from sonny.events import EventType
 from tests.test_dashboard_feed import CFG, SESSION, read, recorded_logs
@@ -24,7 +24,7 @@ def test_every_bus_event_type_is_an_envelope_type():
 
 
 def test_what_the_feed_sends_and_snapshots_fits_the_protocol():
-    feed = UiFeed(CFG)
+    feed = DashboardFeed(CFG)
     sent: list[dict] = []
     feed.listen(sent.append)
     for record in SESSION[:6]:
@@ -41,7 +41,7 @@ def test_what_the_feed_sends_and_snapshots_fits_the_protocol():
 def test_every_record_in_a_recorded_session_log_fits_the_protocol(path):
     if path is None:
         pytest.skip("no recorded logs/session-*.jsonl on this machine")
-    feed = UiFeed(CFG)
+    feed = DashboardFeed(CFG)
     sent: list[dict] = []
     feed.listen(sent.append)
     for record in read(path):

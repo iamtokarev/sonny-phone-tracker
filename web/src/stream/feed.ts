@@ -29,7 +29,7 @@ export interface FeedOptions {
 export interface Feed {
   getState(): Readonly<LiveState>;
   subscribe(listener: () => void): () => void;
-  /** Epoch seconds on Sonny's clock (learnt from the last snapshot), for ticking the timer locally. */
+  /** Epoch seconds on Sonny's clock (learnt from the last snapshot), for ticking the time remaining locally. */
   nowS(): number;
   close(): void;
 }

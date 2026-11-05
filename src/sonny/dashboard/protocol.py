@@ -1,7 +1,7 @@
 """The state feed's wire types (spec §4), shared with the page as `web/src/protocol.gen.ts`.
 
 Pydantic models → JSON Schema (`schema_json()`) → json-schema-to-typescript (`npm run gen:protocol` in web/).
-`UiFeed` builds plain dicts; these models say what they hold, and the tests validate the feed against them.
+`DashboardFeed` builds plain dicts; these models say what they hold, and the tests validate the feed against them.
 An `Envelope` is a union discriminated on `type`, the log record's or `EventType`'s string verbatim. Records
 the page only lists (moves, hooks, wake-up payloads) carry their fields untyped.
 
@@ -335,7 +335,7 @@ def envelope_types() -> set[str]:
 
 
 class SessionView(BaseModel):
-    """Raw times, so the page ticks the timer itself: remaining = duration_s - (now - started_at -
+    """Raw times, so the page ticks the time remaining itself: remaining = duration_s - (now - started_at -
     paused_total_s), with now held at paused_since during a Pause."""
 
     task: str

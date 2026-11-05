@@ -14,7 +14,7 @@ const session = (over: Partial<SessionView> = {}): SessionView => ({
   ...over,
 });
 
-describe("the timer from the snapshot's raw session fields", () => {
+describe("the time remaining from the snapshot's raw session fields", () => {
   it("counts down from the Duration as the Focus Session clock does", () => {
     expect(remainingS(session(), 1000)).toBe(1500);
     expect(remainingS(session(), 1600)).toBe(900);
@@ -40,12 +40,12 @@ describe("the timer from the snapshot's raw session fields", () => {
     expect(remainingS(session(), 990)).toBe(1500);
   });
 
-  it("has no timer without a session", () => {
+  it("has no time remaining without a session", () => {
     expect(remainingS(null, 1000)).toBeNull();
   });
 });
 
-describe("the timer's face", () => {
+describe("the clock face", () => {
   it("shows minutes and seconds, rounding up so it reads 0:00 only at the end", () => {
     expect(formatClock(1500)).toBe("25:00");
     expect(formatClock(599.2)).toBe("10:00");

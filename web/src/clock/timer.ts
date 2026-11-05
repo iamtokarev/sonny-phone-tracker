@@ -1,4 +1,4 @@
-// The Focus Session timer, ticked locally from the snapshot's raw times (spec §4), the way Sonny's
+// The Focus Session's time remaining, ticked locally from the snapshot's raw times (spec §4), the way Sonny's
 // FocusClock reads it: elapsed = (now, or paused_since during a Pause) - started_at - paused_total_s,
 // held within 0..duration_s; remaining = duration_s - elapsed.
 import type { SessionView } from "../protocol.gen";

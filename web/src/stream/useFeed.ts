@@ -16,7 +16,7 @@ export function useFeed(): LiveState {
   return useSyncExternalStore(feed.subscribe, feed.getState);
 }
 
-/** Epoch seconds on Sonny's clock, re-read every `everyMs` so the timer ticks between envelopes. */
+/** Epoch seconds on Sonny's clock, re-read every `everyMs` so the time remaining ticks between envelopes. */
 export function useNow(everyMs = 250): number {
   const feed = useFeedObject();
   const [now, setNow] = useState(feed.nowS);

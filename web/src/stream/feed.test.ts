@@ -280,7 +280,7 @@ describe("when the socket closes", () => {
 });
 
 describe("the clock", () => {
-  it("learns Sonny's clock from the snapshot so the timer ticks on Sonny's time", () => {
+  it("learns Sonny's clock from the snapshot so the time remaining ticks on Sonny's time", () => {
     vi.setSystemTime(1990_000); // the page's clock is 10 s behind Sonny's
     socket().open();
     socket().answerSnapshot(snapshot(1, { server_now: 2000 }));
