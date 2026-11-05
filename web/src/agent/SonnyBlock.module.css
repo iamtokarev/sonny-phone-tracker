@@ -1,0 +1,53 @@
+.block {
+  grid-column: span 4;
+  background: var(--paper);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.figure {
+  width: 84px;
+  height: 84px;
+  display: block;
+  flex: 0 0 auto;
+  transition: opacity 0.5s;
+}
+
+.phase {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.caption {
+  margin: 0;
+  font-size: var(--caption-size);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.caption[data-live] {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Away: the figure fades; the text stays readable (muted, 4.5:1 on paper). */
+.block[data-dimmed] .figure {
+  opacity: 0.3;
+}
+
+.block[data-dimmed] .phase,
+.block[data-dimmed] .caption {
+  color: var(--muted);
+}
