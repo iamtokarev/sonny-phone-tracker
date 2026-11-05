@@ -16,6 +16,7 @@ keywords = ["reachy-mini-app"]
 
 [project.scripts]
 sonny = "sonny.main:main"
+sonny-dashboard-dev = "sonny.dashboard.dev:main"
 
 [project.entry-points."reachy_mini_apps"]
 sonny = "sonny.main:Sonny"
