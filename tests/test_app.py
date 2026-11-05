@@ -311,6 +311,45 @@ def test_quitting_with_the_page_open_does_not_hang(dashboard_app):
     assert not t.is_alive()
 
 
+def test_the_dashboard_serves_the_camera_feed_the_vision_worker_fills(app):
+    import numpy as np
+    from fastapi.testclient import TestClient
+
+    with TestClient(app.settings_app).websocket_connect("/ws/camera") as ws:
+        app.camera.offer(np.zeros((720, 1280, 3), np.uint8), 1.0)
+        assert len(ws.receive_bytes()) > 4
+
+
+def test_quitting_with_the_camera_feed_open_does_not_hang(dashboard_app):
+    import numpy as np
+    from websockets.sync.client import connect
+
+    app, servers = dashboard_app
+    app.run = lambda mini, stop_event: stop_event.wait()
+    t = run_in_thread(app)
+    servers.wait_listening()
+    with connect(f"ws://127.0.0.1:{app.cfg.dashboard.port}/ws/camera") as ws:
+        app.camera.offer(np.zeros((720, 1280, 3), np.uint8), 1.0)
+        assert len(ws.recv(timeout=5)) > 4
+        app.stop()
+        t.join(5)
+    assert not t.is_alive()
+
+
+def test_the_voice_pipeline_gets_the_camera_feed(tmp_path):
+    seen: list = []
+
+    def voice(*args):
+        seen.extend(args)
+        return FakeVoice()
+
+    app = Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    app.run(mini, StopAfterReady())
+    assert app.camera in seen
+
+
 def test_quitting_with_the_state_feed_open_does_not_hang(dashboard_app):
     from websockets.sync.client import connect
 
