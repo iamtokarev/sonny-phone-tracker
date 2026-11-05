@@ -25,6 +25,16 @@ const open = (url: string) => {
 };
 const base = "ws://127.0.0.1:8042/ws/camera";
 
+/** One /ws/camera message: `u32 header_len | JSON header | JPEG` (the JPEG bytes need not decode here). */
+function frameMessage(seq: number): ArrayBuffer {
+  const header = { seq, t: 1, w: 4, h: 4, boxes: [], attention: null, watching: false };
+  const json = new TextEncoder().encode(JSON.stringify(header));
+  const out = new Uint8Array(4 + json.length + 2);
+  new DataView(out.buffer).setUint32(0, json.length, true);
+  out.set(json, 4);
+  return out.buffer;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   sockets = [];
@@ -61,6 +71,26 @@ describe("the camera socket", () => {
     sockets[0].onclose?.();
     vi.advanceTimersByTime(500);
     expect(sockets[1].url).toBe(`${base}?paused=1`);
+  });
+
+  it("starts the backoff over on the first frame, not when a socket merely opens", () => {
+    client = connectCamera(base, () => {}, { open });
+    const retryAfter = () => {
+      sockets.at(-1)!.onclose?.();
+      const before = sockets.length;
+      let waited = 0;
+      while (sockets.length === before) {
+        vi.advanceTimersByTime(100);
+        waited += 100;
+      }
+      return waited;
+    };
+    expect(retryAfter()).toBe(500);
+    sockets.at(-1)!.onopen?.();
+    expect(retryAfter()).toBe(1000); // opened, but no frame came
+    sockets.at(-1)!.onopen?.();
+    sockets.at(-1)!.onmessage?.({ data: frameMessage(1) });
+    expect(retryAfter()).toBe(500);
   });
 
   it("catches up on a choice made before the socket opened", () => {

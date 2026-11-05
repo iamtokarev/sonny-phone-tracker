@@ -4,26 +4,20 @@
 // subscribed from the moment the socket opens. It buffers those, asks for `sonny.snapshot`, applies it, then
 // replays the buffered envelopes with `seq > snapshot.seq`. Live envelopes must come in `seq` order: an old
 // or repeated one is dropped, a gap means one was lost, so the page snapshots again. When the socket closes
-// it reconnects after 0.5 s, doubling up to 5 s, and starts over from a fresh snapshot.
+// it reconnects (reconnecting.ts: 0.5 s doubling up to 5 s, starting over once a snapshot lands) and starts
+// over from a fresh snapshot.
 import type { Envelope, Snapshot } from "../protocol.gen";
+import { reconnecting, sameOriginUrl, type Backoff, type BasicSocket } from "./reconnecting";
 import { applyEnvelope, fromSnapshot, type FeedView } from "./state";
 
 /** connecting: socket not open yet; syncing: waiting for a snapshot; live: following; down: waiting to retry. */
 export type Connection = "connecting" | "syncing" | "live" | "down";
 
-/** The part of the browser's WebSocket the feed uses (tests pass a fake). */
-export interface FeedSocket {
-  onopen: (() => void) | null;
-  onmessage: ((event: { data: unknown }) => void) | null;
-  onclose: (() => void) | null;
-  onerror: (() => void) | null;
-  send(data: string): void;
-  close(): void;
-}
+export type FeedSocket = BasicSocket;
 
 export interface FeedOptions {
   open?: (url: string) => FeedSocket;
-  backoffS?: { first: number; max: number };
+  backoffS?: Backoff;
 }
 
 export interface Feed {
@@ -66,22 +60,15 @@ const EMPTY: LiveState = {
 
 /** The /rpc URL on the page's own origin (Sonny in production, Vite's proxy in dev). */
 export function rpcUrl(location: Pick<Location, "protocol" | "host"> = window.location): string {
-  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`;
+  return sameOriginUrl("/rpc", location);
 }
 
 export function connectFeed(url: string, options: FeedOptions = {}): Feed {
-  const open = options.open ?? ((u: string) => new WebSocket(u) as unknown as FeedSocket);
-  const { first, max } = options.backoffS ?? { first: 0.5, max: 5 };
-
   let offsetS = 0; // Sonny's clock minus the page's
   let state: LiveState = { ...EMPTY, downSinceS: Date.now() / 1000 };
-  let socket: FeedSocket | null = null;
   let buffer: Envelope[] = [];
   let pendingId: number | null = null;
   let nextId = 1;
-  let delayS = first;
-  let retry: ReturnType<typeof setTimeout> | null = null;
-  let closed = false;
   const listeners = new Set<() => void>();
 
   const nowS = () => Date.now() / 1000 + offsetS;
@@ -92,7 +79,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
     for (const listener of listeners) listener();
   };
 
-  const requestSnapshot = () => {
+  const requestSnapshot = (socket: FeedSocket | null) => {
     pendingId = nextId++;
     socket?.send(JSON.stringify({ jsonrpc: "2.0", id: pendingId, method: "sonny.snapshot", params: {} }));
     if (state.connection !== "syncing") set({ ...state, connection: "syncing" });
@@ -107,7 +94,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
       if (e.seq !== view.seq + 1) {
         set(view);
         buffer = sorted.slice(i);
-        requestSnapshot();
+        requestSnapshot(conn.openSocket());
         return;
       }
       view = { ...applyEnvelope(view, e), connection: view.connection, downSinceS: view.downSinceS, synced: true };
@@ -119,11 +106,11 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
   const onSnapshot = (snapshot: Snapshot) => {
     pendingId = null;
     offsetS = snapshot.server_now - Date.now() / 1000;
-    delayS = first; // a healthy connection: the next drop starts the backoff over
+    conn.healthy(); // the next drop starts the backoff over
     follow({ ...fromSnapshot(snapshot), connection: "live", downSinceS: null, synced: true }, buffer);
   };
 
-  const onMessage = (raw: unknown) => {
+  const onMessage = (raw: unknown, socket: FeedSocket) => {
     let message: { id?: number; method?: string; params?: unknown; result?: unknown; error?: unknown };
     try {
       message = JSON.parse(String(raw));
@@ -135,35 +122,24 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
       if (state.connection === "live") follow(state, [envelope]);
       else buffer.push(envelope);
     } else if (message.id !== undefined && message.id === pendingId) {
-      if (message.error !== undefined) socket?.close(); // start over on a fresh socket
+      if (message.error !== undefined) socket.close(); // start over on a fresh socket
       else onSnapshot(message.result as Snapshot);
     }
   };
 
-  const connect = () => {
-    retry = null;
-    buffer = [];
-    pendingId = null;
-    const s = open(url);
-    socket = s;
-    s.onopen = () => {
-      if (socket === s) requestSnapshot();
-    };
-    s.onmessage = (event) => {
-      if (socket === s) onMessage(event.data);
-    };
-    s.onerror = () => {}; // a close always follows
-    s.onclose = () => {
-      if (socket !== s || closed) return;
-      socket = null;
-      set({ ...state, connection: "down" });
-      retry = setTimeout(connect, delayS * 1000);
-      delayS = Math.min(max, delayS * 2);
-    };
-    if (state.connection !== "connecting") set({ ...state, connection: "connecting" });
-  };
-
-  connect();
+  const conn = reconnecting<FeedSocket>({
+    url: () => url,
+    open: options.open,
+    backoffS: options.backoffS,
+    onConnect: () => {
+      buffer = [];
+      pendingId = null;
+      if (state.connection !== "connecting") set({ ...state, connection: "connecting" });
+    },
+    onOpen: requestSnapshot,
+    onMessage,
+    onDown: () => set({ ...state, connection: "down" }),
+  });
 
   return {
     getState: () => state,
@@ -173,10 +149,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
     },
     nowS,
     close() {
-      closed = true;
-      if (retry !== null) clearTimeout(retry);
-      socket?.close();
-      socket = null;
+      conn.close();
       listeners.clear();
     },
   };

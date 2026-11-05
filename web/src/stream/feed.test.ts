@@ -241,20 +241,25 @@ describe("following the state the snapshot carries", () => {
 });
 
 describe("when the socket closes", () => {
-  it("reconnects, backing off from 0.5 s to 5 s", () => {
-    const waits: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      socket().drop();
-      expect(feed.getState().connection).toBe("down");
-      const before = sockets.length;
-      let waited = 0;
-      while (sockets.length === before) {
-        vi.advanceTimersByTime(100);
-        waited += 100;
-      }
-      waits.push(waited);
-    }
-    expect(waits).toEqual([500, 1000, 2000, 4000, 5000, 5000]);
+  // The backoff itself is reconnecting.ts's (reconnecting.test.ts); here, what the feed does around it.
+  it("shows the feed down until it reconnects, and connecting once it tries", () => {
+    socket().drop();
+    expect(feed.getState().connection).toBe("down");
+    vi.advanceTimersByTime(500);
+    expect(sockets).toHaveLength(2);
+    expect(feed.getState().connection).toBe("connecting");
+  });
+
+  it("does not start the backoff over when a socket merely opens", () => {
+    socket().drop();
+    vi.advanceTimersByTime(500);
+    socket().open(); // Sonny accepts, then drops before any snapshot
+    socket().drop();
+    const before = sockets.length;
+    vi.advanceTimersByTime(500);
+    expect(sockets.length).toBe(before);
+    vi.advanceTimersByTime(500);
+    expect(sockets.length).toBe(before + 1);
   });
 
   it("starts the backoff over once a snapshot lands", () => {
