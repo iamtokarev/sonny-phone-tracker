@@ -18,7 +18,10 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.12.5"
+      # web/node_modules is not installed here; the web job runs ESLint instead.
       - run: uvx --python 3.12 pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: web-eslint
 
   test:
     name: Unit tests
@@ -32,3 +35,30 @@ jobs:
           enable-cache: true
       - run: uv sync --locked
       - run: uv run pytest -q
+
+  web:
+    name: Dashboard frontend (web/)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # check:protocol regenerates the types from the Python models, so it needs the uv env.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.12.5"
+          enable-cache: true
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npx vite build
+      - run: uv sync --locked
+        working-directory: .
+      - run: npm run check:protocol
