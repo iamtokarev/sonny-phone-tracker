@@ -103,19 +103,43 @@ def test_two_tabs_share_one_encode_per_frame():
     assert encoder.calls == 1
 
 
-def test_a_paused_tab_gets_nothing_encoded_until_it_resumes():
+def test_a_tab_that_turns_its_feed_off_gets_nothing_encoded_until_it_turns_it_on():
     feed, encoder = slow()
     with serve(feed).websocket_connect("/ws/camera") as ws:
         feed.offer(frame(), 1.0, Detections(1280))
         parse(ws.receive_bytes())
-        ws.send_text(json.dumps({"type": "pause"}))  # read long before the sender's next turn, 0.5 s on
+        ws.send_text(json.dumps({"type": "feed.off"}))  # read long before the sender's next turn, 0.5 s on
         for n in range(2, 5):
             feed.offer(frame(), float(n), Detections(1280))
         time.sleep(0.7)
         assert encoder.calls == 1
-        ws.send_text(json.dumps({"type": "resume"}))
+        ws.send_text(json.dumps({"type": "feed.on"}))
         assert parse(ws.receive_bytes())[0]["seq"] == 4
     assert encoder.calls == 2
+
+
+def test_a_tab_that_connects_with_its_feed_off_gets_nothing_encoded_until_feed_on():
+    """A reloaded page whose owner paused the feed: no frame may be encoded before it could say so."""
+    feed, encoder = slow()
+    feed.offer(frame(), 1.0, Detections(1280))  # waiting in the mailbox as the tab connects
+    with serve(feed).websocket_connect("/ws/camera?paused=1") as ws:
+        for n in range(2, 5):
+            feed.offer(frame(), float(n), Detections(1280))
+        time.sleep(0.7)
+        assert encoder.calls == 0
+        ws.send_text(json.dumps({"type": "feed.on"}))
+        assert parse(ws.receive_bytes())[0]["seq"] == 4
+    assert encoder.calls == 1
+
+
+def test_the_old_pause_message_does_not_turn_the_feed_off():
+    """Pause is the owner's session Pause (glossary); the camera's own controls are feed.off and feed.on."""
+    feed, _ = slow(fps=20)
+    with serve(feed).websocket_connect("/ws/camera") as ws:
+        ws.send_text(json.dumps({"type": "pause"}))
+        time.sleep(0.1)
+        feed.offer(frame(), 1.0, Detections(1280))
+        assert parse(ws.receive_bytes())[0]["seq"] == 1
 
 
 def test_outside_a_session_frames_go_raw_with_no_boxes():

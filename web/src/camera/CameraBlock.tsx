@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { readPalette, useAnimationFrame, usePrefersReducedMotion } from "../main/canvas";
 import styles from "./CameraBlock.module.css";
 import { drawBlank, drawBoxes, drawPicture, drawStatic, fitCanvas, type CameraMode, type Palette } from "./draw";
+import { pageFeedOff } from "./feedOff";
 import { cameraUrl, connectCamera, type CameraClient, type CameraFrame } from "./socket";
 
 /** Seconds without a new frame before the feed shows as frozen (spec §5). */
@@ -18,15 +19,20 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
   const base = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null);
   const palette = useRef<Palette | null>(null);
   const [mode, setMode] = useState<CameraMode>("dither");
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(pageFeedOff.read); // a reload keeps the owner's PAUSE FEED
   const [notice, setNotice] = useState<Notice>(null);
   const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
-    const c = connectCamera(cameraUrl(), (next) => {
-      frame.current?.image.close();
-      frame.current = next;
-    });
+    const startPaused = pageFeedOff.read();
+    const c = connectCamera(
+      cameraUrl(),
+      (next) => {
+        frame.current?.image.close();
+        frame.current = next;
+      },
+      { paused: startPaused },
+    );
     client.current = c;
     return () => {
       c.close();
@@ -38,6 +44,7 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
 
   useEffect(() => {
     client.current?.setPaused(paused);
+    pageFeedOff.save(paused);
     if (paused) {
       frame.current?.image.close();
       frame.current = null;

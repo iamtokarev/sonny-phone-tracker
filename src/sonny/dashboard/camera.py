@@ -17,8 +17,10 @@
 - **Encode only for watchers.** JPEGs are made only for a connected, unpaused client, off the event loop
   (`asyncio.to_thread`), once per frame however many tabs are open.
 - **Only the Dashboard's pages.** A handshake from another site's page closes with 1008 (`sonny.dashboard.origin`).
-- **Privacy.** The page sends the text message `{"type": "pause"}` (or closes the socket) and nothing more is
-  encoded or sent to it until `{"type": "resume"}`. Sonny's watching is unchanged.
+- **Privacy.** The page sends the text message `{"type": "feed.off"}` (or closes the socket) and nothing more is
+  encoded or sent to it until `{"type": "feed.on"}`. A page whose feed is off connects as `/ws/camera?paused=1`
+  and starts off, so no frame is encoded for it before it could say so. Sonny's watching is unchanged. (Not
+  "pause": Pause is the owner's session Pause.)
 """
 
 import asyncio
@@ -110,7 +112,9 @@ class CameraFeed:
         await ws.accept()
         wake = asyncio.Event()
         client = (asyncio.get_running_loop(), wake)
-        paused = asyncio.Event()  # set while the page has paused its feed
+        paused = asyncio.Event()  # set while the page has its feed off
+        if ws.query_params.get("paused") == "1":
+            paused.set()  # before the sender starts: not one frame is encoded for this tab
         with self._lock:
             self._clients.add(client)
         if self._latest is not None:
@@ -119,9 +123,9 @@ class CameraFeed:
         try:
             while True:
                 kind = _message_type(await ws.receive_text())
-                if kind == "pause":
+                if kind == "feed.off":
                     paused.set()
-                elif kind == "resume":
+                elif kind == "feed.on":
                     paused.clear()
                     wake.set()
         except WebSocketDisconnect:

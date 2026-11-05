@@ -32,8 +32,8 @@ export interface CameraMessage {
   jpeg: Uint8Array;
 }
 
-/** What the page sends to stop or restart its feed (Privacy). */
-export type CameraControl = { type: "pause" } | { type: "resume" };
+/** What the page sends to stop or restart its feed (Privacy). Not "pause": Pause is the owner's session Pause. */
+export type CameraControl = { type: "feed.off" } | { type: "feed.on" };
 
 /** The header and the JPEG bytes of one binary message, or null when it is malformed. */
 export function parseCameraMessage(data: ArrayBuffer): CameraMessage | null {
