@@ -67,6 +67,9 @@ class CameraFeed:
         self.cfg = cfg
         self._encode = encode
         self._lock = threading.Lock()  # the mailbox and the client list: the vision thread offers, the loop sends
+        # Written by `offer` (the vision thread) under `_lock`; the senders on the event loop read it without the
+        # lock. That relies on CPython swapping an attribute reference atomically: a reader sees the old frame or
+        # the new one, never half of either, and `_Frame` is immutable once made.
         self._latest: _Frame | None = None
         self._seq = 0
         self._clients: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()

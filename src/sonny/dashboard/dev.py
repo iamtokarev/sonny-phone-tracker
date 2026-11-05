@@ -162,6 +162,8 @@ class CameraLoop:
     ) -> None:
         self.cfg, self._feed, self._camera, self._always = cfg, feed, camera, always_watch
         self._capture, self._clip = capture, loop_clip
+        # Written only by the camera thread, read by the health tick without a lock: each is one int or float
+        # reference, which CPython swaps atomically. The two may be one frame apart, which a health reading allows.
         self.frames = 0
         self.frame_t = 0.0
 
