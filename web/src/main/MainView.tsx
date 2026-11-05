@@ -28,7 +28,7 @@ export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
 
   const session = state.session;
   const s = scene(state);
-  const status = statusLine(state);
+  const status = statusLine(state, nowS);
   const away = s === "away";
   const timeline = session === null ? null : buildTimeline(merged, session, nowS);
   const paused = session !== null && session.paused_since !== null && s !== "ended";

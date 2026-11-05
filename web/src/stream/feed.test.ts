@@ -270,6 +270,19 @@ describe("when the socket closes", () => {
     expect(sockets.length).toBe(before + 1);
   });
 
+  it("records since when the page has been without a live feed, on Sonny's clock", () => {
+    expect(feed.getState().downSinceS).toBeCloseTo(2000, 1); // not live yet since the page opened
+    socket().open();
+    socket().answerSnapshot(snapshot(1, { server_now: 2010 })); // Sonny's clock is 10 s ahead
+    expect(feed.getState().downSinceS).toBeNull();
+    vi.advanceTimersByTime(3000);
+    socket().drop();
+    expect(feed.getState().downSinceS).toBeCloseTo(2013, 1);
+    vi.advanceTimersByTime(600);
+    socket().drop(); // a failed retry keeps the first moment it went down
+    expect(feed.getState().downSinceS).toBeCloseTo(2013, 1);
+  });
+
   it("stops for good when the feed is closed", () => {
     feed.close();
     expect(socket().closed).toBe(true);

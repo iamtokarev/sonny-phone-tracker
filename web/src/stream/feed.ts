@@ -36,12 +36,16 @@ export interface Feed {
 
 export interface LiveState extends FeedView {
   connection: Connection;
+  /** Epoch seconds on Sonny's clock since which the feed has not been live (since the page opened, at first);
+   *  null while live. The status line reads it to tell a brief reconnect from Sonny being gone. */
+  downSinceS: number | null;
   /** False until the first snapshot lands; the rest of the fields are empty until then. */
   synced: boolean;
 }
 
 const EMPTY: LiveState = {
   connection: "connecting",
+  downSinceS: null,
   synced: false,
   seq: 0,
   session: null,
@@ -69,8 +73,8 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
   const open = options.open ?? ((u: string) => new WebSocket(u) as unknown as FeedSocket);
   const { first, max } = options.backoffS ?? { first: 0.5, max: 5 };
 
-  let state: LiveState = EMPTY;
   let offsetS = 0; // Sonny's clock minus the page's
+  let state: LiveState = { ...EMPTY, downSinceS: Date.now() / 1000 };
   let socket: FeedSocket | null = null;
   let buffer: Envelope[] = [];
   let pendingId: number | null = null;
@@ -80,8 +84,11 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
   let closed = false;
   const listeners = new Set<() => void>();
 
+  const nowS = () => Date.now() / 1000 + offsetS;
+
   const set = (next: LiveState) => {
-    state = next;
+    const downSinceS = next.connection === "live" ? null : (state.downSinceS ?? nowS());
+    state = next.downSinceS === downSinceS ? next : { ...next, downSinceS };
     for (const listener of listeners) listener();
   };
 
@@ -103,7 +110,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
         requestSnapshot();
         return;
       }
-      view = { ...applyEnvelope(view, e), connection: view.connection, synced: true };
+      view = { ...applyEnvelope(view, e), connection: view.connection, downSinceS: view.downSinceS, synced: true };
     }
     buffer = [];
     set(view);
@@ -113,7 +120,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
     pendingId = null;
     offsetS = snapshot.server_now - Date.now() / 1000;
     delayS = first; // a healthy connection: the next drop starts the backoff over
-    follow({ ...fromSnapshot(snapshot), connection: "live", synced: true }, buffer);
+    follow({ ...fromSnapshot(snapshot), connection: "live", downSinceS: null, synced: true }, buffer);
   };
 
   const onMessage = (raw: unknown) => {
@@ -164,7 +171,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    nowS: () => Date.now() / 1000 + offsetS,
+    nowS,
     close() {
       closed = true;
       if (retry !== null) clearTimeout(retry);

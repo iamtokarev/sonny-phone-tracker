@@ -27,8 +27,15 @@ export interface StatusLine {
   blink: boolean;
 }
 
-export function statusLine(state: LiveState): StatusLine {
-  if (state.connection !== "live") return { text: "Connecting", problem: false, blink: false };
+/** Seconds without a live /rpc feed before the status line stops saying CONNECTING: Sonny is gone. */
+export const OFFLINE_AFTER_S = 5;
+
+/** The header's status line at `nowS` (epoch seconds on Sonny's clock, as `LiveState.downSinceS`). */
+export function statusLine(state: LiveState, nowS: number): StatusLine {
+  if (state.connection !== "live") {
+    const offline = state.downSinceS !== null && nowS - state.downSinceS >= OFFLINE_AFTER_S;
+    return offline ? { text: "Sonny offline", problem: true, blink: false } : { text: "Connecting", problem: false, blink: false };
+  }
   const s = scene(state);
   if (s === "blind") return { text: "Link lost", problem: true, blink: true };
   if (state.link.down !== null) return { text: "Link lost", problem: true, blink: false };

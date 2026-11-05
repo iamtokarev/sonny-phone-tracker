@@ -23,6 +23,7 @@ const link = {
 };
 const live: LiveState = {
   connection: "live",
+  downSinceS: null,
   synced: true,
   seq: 10,
   session,
@@ -48,9 +49,9 @@ describe("scene", () => {
 
 describe("statusLine", () => {
   it("reads ALL OK in a session, STANDBY outside one, and blinks LINK LOST while Blind", () => {
-    expect(statusLine(live)).toEqual({ text: "All OK", problem: false, blink: false });
-    expect(statusLine({ ...live, session: null })).toEqual({ text: "Standby", problem: false, blink: false });
-    expect(statusLine({ ...live, session: { ...session, blind: "robot_stream_stalled" } })).toEqual({
+    expect(statusLine(live, 1_100)).toEqual({ text: "All OK", problem: false, blink: false });
+    expect(statusLine({ ...live, session: null }, 1_100)).toEqual({ text: "Standby", problem: false, blink: false });
+    expect(statusLine({ ...live, session: { ...session, blind: "robot_stream_stalled" } }, 1_100)).toEqual({
       text: "Link lost",
       problem: true,
       blink: true,
@@ -58,12 +59,20 @@ describe("statusLine", () => {
   });
 
   it("shows a lost link outside a session without blinking, and the page's own connection first", () => {
-    expect(statusLine({ ...live, session: null, link: { ...link, down: "daemon_unreachable" } })).toEqual({
+    expect(statusLine({ ...live, session: null, link: { ...link, down: "daemon_unreachable" } }, 1_100)).toEqual({
       text: "Link lost",
       problem: true,
       blink: false,
     });
-    expect(statusLine({ ...live, connection: "down" }).text).toBe("Connecting");
+    expect(statusLine({ ...live, connection: "down", downSinceS: 1_000 }, 1_001).text).toBe("Connecting");
+  });
+
+  it("reads CONNECTING for the first seconds without /rpc, then SONNY OFFLINE as a problem", () => {
+    const lost: LiveState = { ...live, connection: "down", downSinceS: 1_000 };
+    expect(statusLine(lost, 1_004.9)).toEqual({ text: "Connecting", problem: false, blink: false });
+    expect(statusLine(lost, 1_005)).toEqual({ text: "Sonny offline", problem: true, blink: false });
+    expect(statusLine({ ...lost, connection: "connecting" }, 1_060)).toEqual({ text: "Sonny offline", problem: true, blink: false });
+    expect(statusLine({ ...lost, connection: "syncing" }, 1_002).text).toBe("Connecting");
   });
 });
 
