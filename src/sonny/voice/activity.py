@@ -24,8 +24,13 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 
 class AgentActivity:
-    def __init__(self, stuck_after_s: float, clock: Callable[[], float] = time.monotonic) -> None:
-        self._stuck_after_s, self._clock = stuck_after_s, clock
+    def __init__(
+        self,
+        stuck_after_s: float,
+        clock: Callable[[], float] = time.monotonic,
+        on_begin: Callable[[], None] = lambda: None,  # the Dashboard's agent phase: thinking
+    ) -> None:
+        self._stuck_after_s, self._clock, self._on_begin = stuck_after_s, clock, on_begin
         self._reset()
 
     def _reset(self) -> None:
@@ -49,6 +54,7 @@ class AgentActivity:
     def begin(self) -> None:
         self._call_due = True
         self._changed = self._clock()
+        self._on_begin()
 
     def observe(self, frame: Frame) -> None:
         if isinstance(frame, LLMFullResponseStartFrame):

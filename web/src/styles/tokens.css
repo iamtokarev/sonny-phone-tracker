@@ -1,0 +1,74 @@
+/* Design tokens from board 02b, Raw Brutalist calm (spec §9). The accent means "something's wrong" and
+   is used for nothing else: Phone Use, ladder step 3, Nudge marks, lost link. */
+
+/* Bundled with the build (OFL, from @fontsource): the page makes no font request off this Mac. */
+@font-face {
+  font-family: "Archivo Black";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("@fontsource/archivo-black/files/archivo-black-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  --paper: #efede6;
+  --ink: #111111;
+  --accent: #ff4d00;
+  --muted: #5a574f;
+  --idle: #b8b5aa;
+
+  --rule: 3px;
+  --rule-list: 2px;
+
+  --font-display: "Archivo Black", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --timer-size: clamp(150px, 22vw, 330px);
+  --timer-tracking: -0.055em;
+  --state-size: 46px;
+  --body-size: 12px;
+  --caption-size: 15px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--body-size);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
