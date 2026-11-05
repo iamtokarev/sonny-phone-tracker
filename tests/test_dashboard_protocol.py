@@ -49,3 +49,20 @@ def test_every_record_in_a_recorded_session_log_fits_the_protocol(path):
     for envelope in sent:
         Envelope.model_validate(envelope)
     Snapshot.model_validate(feed.snapshot())
+
+
+def test_the_wire_names_are_the_enums_values_so_they_cannot_drift():
+    from typing import get_args
+
+    from sonny.attention import AttentionState
+    from sonny.dashboard.protocol import AttentionStateName, EndReasonName
+    from sonny.events import EndReason
+
+    assert get_args(AttentionStateName) == tuple(s.value for s in AttentionState)
+    assert get_args(EndReasonName) == tuple(r.value for r in EndReason)
+
+
+def test_no_wire_type_shadows_the_attention_rules_detections():
+    import sonny.dashboard.protocol as protocol
+
+    assert not hasattr(protocol, "Detections"), "sonny.attention.Detections is the detector's; name the envelope apart"

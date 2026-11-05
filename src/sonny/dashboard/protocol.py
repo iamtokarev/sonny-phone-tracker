@@ -15,10 +15,12 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field, RootModel
 from pydantic.json_schema import GenerateJsonSchema
 
-AttentionStateName = Literal["focused", "phone_use", "away"]
-EndReasonName = Literal[
-    "completed", "ended_by_owner", "pause_timeout", "ended_while_blind", "ended_during_sleep", "app_quit"
-]
+from sonny.attention import AttentionState
+from sonny.events import EndReason
+
+# The enums' values, so the wire names cannot drift from Sonny's own.
+AttentionStateName = Literal[tuple(s.value for s in AttentionState)]  # type: ignore[valid-type]
+EndReasonName = Literal[tuple(r.value for r in EndReason)]  # type: ignore[valid-type]
 AgentPhase = Literal["idle", "listening", "thinking", "speaking"]
 
 
@@ -258,7 +260,7 @@ class Nudge(_Envelope):
     data: NudgeData
 
 
-class Detections(_Envelope):
+class DetectionsReport(_Envelope):
     type: Literal["detections"]
     data: DetectionsData
 
@@ -315,7 +317,7 @@ ENVELOPES = (
     LlmCall,
     ToolCall,
     Nudge,
-    Detections,
+    DetectionsReport,
     Reconnect,
     HealthTick,
     AgentPhaseChanged,
