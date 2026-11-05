@@ -20,6 +20,7 @@ from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
+from sonny.dashboard.origin import HOST
 from sonny.dashboard.rpc import mount_feed
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
@@ -83,7 +84,7 @@ class Sonny(ReachyMiniApp):
         link: LinkFactory = make_link,
     ) -> None:
         # Read by the base class, which serves STATIC_DIR on it in a thread that stops with stop_event (spec §2).
-        self.custom_app_url = f"http://{cfg.dashboard.host}:{cfg.dashboard.port}"
+        self.custom_app_url = f"http://{HOST}:{cfg.dashboard.port}"
         super().__init__()
         self.cfg = cfg
         self.bus = EventBus()

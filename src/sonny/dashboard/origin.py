@@ -18,11 +18,12 @@ from starlette.websockets import WebSocket
 
 from sonny.config import Dashboard
 
+# Where Sonny and the dev replayer listen (ADR 0005): this Mac only, never the LAN. Not configurable.
+HOST = "127.0.0.1"
+
 
 def dashboard_origins(cfg: Dashboard) -> frozenset[str]:
-    return frozenset(
-        f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (cfg.port, cfg.dev_port)
-    )
+    return frozenset(f"http://{host}:{port}" for host in (HOST, "localhost") for port in (cfg.port, cfg.dev_port))
 
 
 def allowed_origin(websocket: WebSocket, cfg: Dashboard) -> bool:

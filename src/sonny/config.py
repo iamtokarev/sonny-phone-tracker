@@ -228,8 +228,7 @@ class Head:
 
 @dataclass(frozen=True)
 class Dashboard:
-    host: str
-    port: int
+    port: int  # on 127.0.0.1 only (`sonny.dashboard.origin.HOST`, ADR 0005): no key can change the host
     open_browser: bool
     camera_width: int
     camera_height: int

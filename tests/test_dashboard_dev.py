@@ -147,3 +147,14 @@ def test_the_dev_app_serves_sonnys_feed_and_camera_routes():
             header = json.loads(message[4 : 4 + n])
             assert {b["cls"] for b in header["boxes"]} == {"phone", "person"}
             assert header["attention"] == "phone_use"
+
+
+def test_the_dev_app_binds_127_0_0_1_only(monkeypatch, capsys):
+    import uvicorn
+
+    bound: list[tuple[str, int]] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, host, port, **kw: bound.append((host, port)))
+    from sonny.dashboard import dev
+
+    assert dev.main([]) == 0
+    assert bound == [("127.0.0.1", CFG.port)]

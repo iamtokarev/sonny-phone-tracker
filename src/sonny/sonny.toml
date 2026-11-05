@@ -153,8 +153,7 @@ line_wait_s = 20  # a move waits at most this long for the line before it to be 
 cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops making others busy
 motors_check_s = 5  # how often an idle head owner asks the daemon whether the motors are up (play_emotion: unavailable)
 
-[dashboard]  # the live page Sonny serves while it runs (ADR 0005); bind 127.0.0.1 only, never the LAN
-host = "127.0.0.1"
+[dashboard]  # the live page Sonny serves while it runs (ADR 0005), always on 127.0.0.1, never the LAN
 port = 8042
 open_browser = false  # true opens a browser tab on the Dashboard once Sonny is ready
 # /ws/camera (spec §5): frames scaled to fit camera_width x camera_height, as JPEG, only while a tab watches

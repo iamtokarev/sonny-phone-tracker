@@ -35,6 +35,7 @@ from sonny.attention import AttentionState, Box, Detections
 from sonny.config import Config, load_config
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
+from sonny.dashboard.origin import HOST
 from sonny.dashboard.rpc import mount_feed
 
 Record = dict[str, Any]
@@ -223,7 +224,7 @@ class _Routes(ReachyMiniApp):
     """Only for the base class's FastAPI app: `/` and `/static` from Sonny's own static folder, as Sonny has them."""
 
     def __init__(self, cfg: Config) -> None:
-        self.custom_app_url = f"http://{cfg.dashboard.host}:{cfg.dashboard.port}"
+        self.custom_app_url = f"http://{HOST}:{cfg.dashboard.port}"
         super().__init__()
 
     def _get_instance_path(self) -> Path:
@@ -275,14 +276,14 @@ def main(argv: list[str] | None = None) -> int:
         threading.Thread(target=replayer.run, name="sonny-dev-replay", daemon=True).start()
     feed.run_health(stop, lambda: Readings(None, loop.frames, loop.frame_t or None))
 
-    url = f"http://{cfg.dashboard.host}:{cfg.dashboard.port}"
+    url = f"http://{HOST}:{cfg.dashboard.port}"
     if (sonny.main.STATIC_DIR / "index.html").exists():
         print(f"Dashboard: {url}", flush=True)
     else:
         print("Dashboard not built (run npm run build in web/)", flush=True)
-    print(f"With npm run dev in web/: http://127.0.0.1:{cfg.dashboard.dev_port}/static/", flush=True)
+    print(f"With npm run dev in web/: http://{HOST}:{cfg.dashboard.dev_port}/static/", flush=True)
     try:
-        uvicorn.run(app, host=cfg.dashboard.host, port=cfg.dashboard.port, log_level="warning")
+        uvicorn.run(app, host=HOST, port=cfg.dashboard.port, log_level="warning")
     finally:
         stop.set()
     return 0
