@@ -227,6 +227,7 @@ class _Routes(ReachyMiniApp):
         self.custom_app_url = dashboard_url(cfg.dashboard)
         super().__init__()
 
+    # Private base-class hook (reachy-mini ==1.11.0); tests/test_reachy_private_api.py guards it.
     def _get_instance_path(self) -> Path:
         return Path(sonny.main.__file__).resolve()  # the static folder sits next to Sonny's module
 
