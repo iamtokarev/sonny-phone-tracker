@@ -1,6 +1,7 @@
 // The shell: header, task line and the timer, from the live feed. Ticket 07 builds the rest of board 02b.
 import styles from "./App.module.css";
 import { formatClock, remainingS } from "./clock/timer";
+import { DetailsDrawer, DetailsToggle } from "./details/Details";
 import type { LiveState } from "./stream/feed";
 import { useFeed, useNow } from "./stream/useFeed";
 
@@ -26,6 +27,7 @@ export function App() {
           <span className={styles.dot} aria-hidden="true" />
           {text}
         </span>
+        <DetailsToggle />
       </header>
 
       <section className={styles.session}>
@@ -36,6 +38,7 @@ export function App() {
           {formatClock(remainingS(session, now) ?? 0)}
         </div>
       </section>
+      <DetailsDrawer />
     </main>
   );
 }

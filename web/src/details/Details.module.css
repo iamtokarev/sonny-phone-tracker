@@ -1,0 +1,129 @@
+/* Board 02b's Details section. The accent is for Nudge rows only. */
+
+/* Keep the scrollbar's room reserved, so the drawer making the page scroll doesn't narrow the main view. */
+:global(html) {
+  scrollbar-gutter: stable;
+}
+
+.toggle {
+  padding: 6px 12px;
+  min-height: 32px;
+  border: var(--rule) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.toggle[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.toggle:focus-visible {
+  outline: var(--rule) solid var(--ink);
+  outline-offset: 3px;
+}
+
+.drawer {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--rule);
+  background: var(--ink);
+  border: var(--rule) solid var(--ink);
+}
+
+.drawer[hidden] {
+  display: none;
+}
+
+.transcript,
+.health,
+.events {
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.transcript {
+  grid-column: span 6;
+  background: var(--paper);
+}
+
+.health {
+  grid-column: span 3;
+  background: var(--paper);
+}
+
+.events {
+  grid-column: span 3;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.empty {
+  margin: 8px 0 0;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 70px 64px minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 0;
+  margin-top: 4px;
+  border-top: var(--rule-list) solid var(--ink);
+}
+
+.line[data-nudge] {
+  background: var(--accent);
+}
+
+.who {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  margin-top: 4px;
+  border-top: var(--rule-list) solid var(--ink);
+  text-transform: uppercase;
+}
+
+.metric dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.event {
+  padding: 5px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .transcript,
+  .health,
+  .events {
+    grid-column: 1 / -1;
+  }
+}
