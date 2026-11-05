@@ -11,7 +11,8 @@ time, `data` the rest of the record; `seq` rises by one per envelope for the run
 
 `snapshot()` is what a page applies on connect: the session (raw times, so the page ticks the time remaining itself),
 the Attention State, the open Distraction Episode, the agent phase, the latest health, and the last
-`recent_max` envelopes. Health ticks are not kept in `recent`; the snapshot carries the latest one.
+`recent_max` envelopes (and `recent_max` itself, so the page trims `recent` as Sonny does). Health ticks are not
+kept in `recent`; the snapshot carries the latest one.
 """
 
 import json
@@ -99,6 +100,7 @@ class DashboardFeed:
                 "agent": {"phase": self._phase},
                 "link": dict(self._link),
                 "recent": list(self._recent),
+                "recent_max": self.cfg.recent_max,
             }
 
     def tick(self, readings: Readings) -> None:

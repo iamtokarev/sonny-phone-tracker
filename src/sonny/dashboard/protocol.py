@@ -371,6 +371,7 @@ class Snapshot(BaseModel):
     agent: AgentView
     link: Health
     recent: list[Envelope]
+    recent_max: int  # how many envelopes `recent` keeps; the page keeps as many as it follows
 
 
 class DashboardProtocol(BaseModel):

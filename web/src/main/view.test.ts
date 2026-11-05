@@ -32,6 +32,7 @@ const live: LiveState = {
   agent: { phase: "idle" },
   link,
   recent: [],
+  recent_max: 500,
 };
 
 describe("scene", () => {

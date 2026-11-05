@@ -2,14 +2,12 @@
 // as Sonny's DashboardFeed (src/sonny/dashboard/feed.py, `_apply`), so the page agrees with the next snapshot.
 import type { Envelope, Snapshot } from "../protocol.gen";
 
-/** How many envelopes `recent` keeps, as Sonny's `recent_max` default. */
-export const RECENT_MAX = 500;
-
+/** `recent_max` is the snapshot's: `recent` keeps as many envelopes as Sonny's does. */
 export type FeedView = Omit<Snapshot, "server_now">;
 
 export function fromSnapshot(snapshot: Snapshot): FeedView {
-  const { seq, session, attention, episode, agent, link, recent } = snapshot;
-  return { seq, session, attention, episode, agent, link, recent: recent.slice(-RECENT_MAX) };
+  const { seq, session, attention, episode, agent, link, recent, recent_max } = snapshot;
+  return { seq, session, attention, episode, agent, link, recent: recent.slice(-recent_max), recent_max };
 }
 
 /** The view after one envelope (a new object; the old one is left as it was). */
@@ -19,7 +17,7 @@ export function applyEnvelope(view: FeedView, e: Envelope): FeedView {
     next.link = e.data;
     return next; // health ticks are not kept in `recent`
   }
-  next.recent = [...view.recent.slice(-(RECENT_MAX - 1)), e];
+  next.recent = [...view.recent.slice(Math.max(0, view.recent.length + 1 - view.recent_max)), e];
   const s = view.session;
 
   switch (e.type) {

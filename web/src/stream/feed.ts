@@ -56,6 +56,7 @@ const EMPTY: LiveState = {
     stream_lag_s: null,
   },
   recent: [],
+  recent_max: 0, // until the first snapshot says; no envelope is applied before it
 };
 
 /** The /rpc URL on the page's own origin (Sonny in production, Vite's proxy in dev). */

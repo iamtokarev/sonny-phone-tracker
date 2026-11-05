@@ -57,6 +57,7 @@ function snapshot(seq: number, over: Partial<Snapshot> = {}): Snapshot {
     agent: { phase: "idle" },
     link: health,
     recent: [],
+    recent_max: 500,
     ...over,
   };
 }
