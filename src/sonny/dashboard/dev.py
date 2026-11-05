@@ -280,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Dashboard: {url}", flush=True)
     else:
         print("Dashboard not built (run npm run build in web/)", flush=True)
-    print(f"With npm run dev in web/: http://localhost:{cfg.dashboard.dev_port}", flush=True)
+    print(f"With npm run dev in web/: http://127.0.0.1:{cfg.dashboard.dev_port}/static/", flush=True)
     try:
         uvicorn.run(app, host=cfg.dashboard.host, port=cfg.dashboard.port, log_level="warning")
     finally:

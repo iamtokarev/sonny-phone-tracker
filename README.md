@@ -65,7 +65,7 @@ Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests
 
 `sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
 LLM: it replays session logs as the state feed and fills the camera feed. Next to `npm run dev` in
-`web/` (http://localhost:5173, which proxies to it):
+`web/` (http://127.0.0.1:5173/static/, which proxies `/rpc` and `/ws` to it):
 
 ```bash
 uv run sonny-dashboard-dev --log logs/session-*.jsonl --speed 10   # replays the logs in order, then loops
