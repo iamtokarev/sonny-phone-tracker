@@ -60,3 +60,18 @@ SONNY_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
 ```
 
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
+
+### Dashboard without the robot
+
+`sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
+LLM: it replays session logs as the state feed and fills the camera feed. Next to `npm run dev` in
+`web/` (http://localhost:5173, which proxies to it):
+
+```bash
+uv run sonny-dashboard-dev --log logs/session-*.jsonl --speed 10   # replays the logs in order, then loops
+uv run sonny-dashboard-dev --log logs/session-20261103-*.jsonl --webcam  # Mac webcam through the detector
+```
+
+Without `--webcam` (or `--clip video.mp4`) the camera shows a drawn placeholder scene whose boxes
+follow the replayed Attention State. `--speed N` plays N times faster and shortens the session's
+Duration to match, so the page's timer runs out with the replay.
