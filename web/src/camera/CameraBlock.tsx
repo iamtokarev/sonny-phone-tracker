@@ -71,7 +71,7 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
       b.key = key;
     }
     ctx.drawImage(b.canvas, 0, 0);
-    drawBoxes(ctx, f, p, { hot, t: reduced ? null : t, dpr });
+    drawBoxes(ctx, f, p, { hot, t: reduced || next === "frozen" ? null : t, dpr }); // a frozen frame stays still
   });
 
   return (
