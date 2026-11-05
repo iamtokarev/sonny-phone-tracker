@@ -22,3 +22,13 @@ repos:
     rev: 0.12.5
     hooks:
       - id: uv-lock
+
+  # ESLint on staged web/ files. Needs `npm ci` in web/ first; CI skips it (the web job lints).
+  - repo: local
+    hooks:
+      - id: web-eslint
+        name: eslint (web/)
+        language: system
+        files: ^web/.*\.(ts|tsx|js|mjs)$
+        exclude: ^web/src/protocol\.gen\.ts$
+        entry: bash -c 'cd web && exec node_modules/.bin/eslint --max-warnings=0 --no-warn-ignored "${@#web/}"' --
