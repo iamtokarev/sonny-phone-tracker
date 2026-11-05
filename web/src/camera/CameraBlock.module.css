@@ -1,0 +1,73 @@
+.block {
+  grid-column: span 4;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.view {
+  position: relative;
+}
+
+.canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  background: var(--ink);
+  transition: opacity 0.5s;
+}
+
+.notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.notice span {
+  background: var(--paper);
+  padding: 4px 10px;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+}
+
+.controls {
+  display: flex;
+  border-top: var(--rule) solid var(--ink);
+}
+
+.toggle {
+  flex: 1 1 0;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.toggle + .toggle {
+  border-left: var(--rule) solid var(--ink);
+}
+
+.toggle[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.toggle:focus-visible {
+  outline: var(--rule) solid currentColor;
+  outline-offset: -7px;
+}
+
+/* Away: the picture fades; the buttons stay readable. */
+.block[data-dimmed] .canvas {
+  opacity: 0.3;
+}
