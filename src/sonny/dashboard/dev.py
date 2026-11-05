@@ -36,7 +36,7 @@ from sonny.config import Config, load_config
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.origin import HOST
-from sonny.dashboard.rpc import mount_feed
+from sonny.dashboard.serve import announce, dashboard_url, mount_routes
 
 Record = dict[str, Any]
 
@@ -224,7 +224,7 @@ class _Routes(ReachyMiniApp):
     """Only for the base class's FastAPI app: `/` and `/static` from Sonny's own static folder, as Sonny has them."""
 
     def __init__(self, cfg: Config) -> None:
-        self.custom_app_url = f"http://{HOST}:{cfg.dashboard.port}"
+        self.custom_app_url = dashboard_url(cfg.dashboard)
         super().__init__()
 
     def _get_instance_path(self) -> Path:
@@ -239,8 +239,7 @@ def build_app(cfg: Config) -> tuple[FastAPI, DashboardFeed, CameraFeed]:
     app = _Routes(cfg).settings_app
     assert app is not None
     feed, camera = DashboardFeed(cfg.dashboard), CameraFeed(cfg.dashboard)
-    camera.mount(app)
-    mount_feed(app, feed)
+    mount_routes(app, feed, camera)
     return app, feed, camera
 
 
@@ -276,11 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         threading.Thread(target=replayer.run, name="sonny-dev-replay", daemon=True).start()
     feed.run_health(stop, lambda: Readings(None, loop.frames, loop.frame_t or None))
 
-    url = f"http://{HOST}:{cfg.dashboard.port}"
-    if (sonny.main.STATIC_DIR / "index.html").exists():
-        print(f"Dashboard: {url}", flush=True)
-    else:
-        print("Dashboard not built (run npm run build in web/)", flush=True)
+    announce(sonny.main.STATIC_DIR, dashboard_url(cfg.dashboard))
     print(f"With npm run dev in web/: http://{HOST}:{cfg.dashboard.dev_port}/static/", flush=True)
     try:
         uvicorn.run(app, host=HOST, port=cfg.dashboard.port, log_level="warning")

@@ -20,8 +20,7 @@ from sonny.config import Config, load_config
 from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
-from sonny.dashboard.origin import HOST
-from sonny.dashboard.rpc import mount_feed
+from sonny.dashboard.serve import announce, dashboard_url, mount_routes
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
 from sonny.link import LinkWatch, ReachyRepair
@@ -84,20 +83,18 @@ class Sonny(ReachyMiniApp):
         link: LinkFactory = make_link,
     ) -> None:
         # Read by the base class, which serves STATIC_DIR on it in a thread that stops with stop_event (spec §2).
-        self.custom_app_url = f"http://{HOST}:{cfg.dashboard.port}"
+        self.custom_app_url = dashboard_url(cfg.dashboard)
         super().__init__()
         self.cfg = cfg
         self.bus = EventBus()
         self.log = log or SessionLog(cfg.log.dir)
         self.camera = CameraFeed(cfg.dashboard)  # spec §5: filled by the vision worker, served at /ws/camera
-        if self.settings_app is not None:
-            self.camera.mount(self.settings_app)
         self._make_voice, self._make_robot, self._make_link = voice, robot, link
         # The Dashboard's state feed (spec §4): every log record and bus event, served on /rpc.
         self.feed = DashboardFeed(cfg.dashboard, self.bus)
         self.log.on_record = self.feed.on_record
         if self.settings_app is not None:
-            mount_feed(self.settings_app, self.feed)
+            mount_routes(self.settings_app, self.feed, self.camera)
         self._health: threading.Thread | None = None
 
     def run(self, reachy_mini: ReachyMini, stop_event: threading.Event) -> None:
@@ -131,11 +128,7 @@ class Sonny(ReachyMiniApp):
 
     def _ready(self) -> None:
         print("ready", flush=True)
-        if not (STATIC_DIR / "index.html").exists():
-            print("Dashboard not built (run npm run build in web/)", flush=True)
-            return
-        print(f"Dashboard: {self.custom_app_url}", flush=True)
-        if self.cfg.dashboard.open_browser:
+        if announce(STATIC_DIR, self.custom_app_url) and self.cfg.dashboard.open_browser:
             webbrowser.open(self.custom_app_url)
 
     def _quit(self, head: HeadOwner, hub: MediaHub, link: Link, link_stop: threading.Event) -> None:
