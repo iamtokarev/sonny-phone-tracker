@@ -35,7 +35,7 @@ export function ExpandedView({ session, scene, episode, phase, feed, nowS, onCol
             {paused && " · Paused"}
           </span>
           <span className={styles.timer} data-scene={scene} aria-label="Time remaining">
-            {formatClock(remainingS(session, nowS) ?? 0)}
+            {formatClock(scene === "ended" ? 0 : (remainingS(session, nowS) ?? 0))}
           </span>
         </div>
         <span className={styles.chip} data-scene={scene} role="status" aria-label="Attention">
