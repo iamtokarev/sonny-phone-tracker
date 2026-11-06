@@ -22,7 +22,8 @@ export interface MainViewProps {
   nowS: number;
   /** The Details toggle, drawn at the right of the header (ticket 08). */
   detailsToggle?: ReactNode;
-  /** The camera fills the page below the header (v2 spec §3); the normal view stays mounted, hidden. */
+  /** The camera fills the page below the header (v2 spec §3); the normal view stays mounted, hidden, and its
+   *  canvases stop drawing. */
   expanded?: boolean;
   onExpand?: () => void;
   onCollapse?: () => void;
@@ -85,8 +86,15 @@ export function MainView({ state, nowS, detailsToggle, expanded = false, onExpan
 
       <div className={styles.blocks} hidden={expanded}>
         <AttentionBlock scene={s} episode={state.episode} nowS={nowS} ended={ended} />
-        <SonnyBlock phase={state.agent.phase} caption={caption(state)} dimmed={away} />
-        <CameraBlock feed={camera} blind={s === "blind"} hot={s === "phone_use"} dimmed={away} onExpand={() => onExpand?.()} />
+        <SonnyBlock phase={state.agent.phase} caption={caption(state)} dimmed={away} active={!expanded} />
+        <CameraBlock
+          feed={camera}
+          blind={s === "blind"}
+          hot={s === "phone_use"}
+          dimmed={away}
+          onExpand={() => onExpand?.()}
+          active={!expanded}
+        />
       </div>
     </div>
   );

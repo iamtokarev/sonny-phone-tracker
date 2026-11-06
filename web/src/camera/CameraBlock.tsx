@@ -78,10 +78,12 @@ export interface CameraViewProps {
   /** Drawn in the expanded view: bigger dither cells and notice, and COLLAPSE instead of EXPAND. */
   expanded: boolean;
   onExpandToggle: () => void;
+  /** False while hidden (the block under the expanded camera): the picture stops drawing. */
+  active?: boolean;
 }
 
 /** The picture (letterboxed 16:9), its notice and the RAW, PAUSE FEED and EXPAND / COLLAPSE buttons. */
-export function CameraView({ feed, blind, hot, expanded, onExpandToggle }: CameraViewProps) {
+export function CameraView({ feed, blind, hot, expanded, onExpandToggle, active = true }: CameraViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const base = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null);
   const palette = useRef<Palette | null>(null);
@@ -117,7 +119,7 @@ export function CameraView({ feed, blind, hot, expanded, onExpandToggle }: Camer
     }
     ctx.drawImage(b.canvas, 0, 0);
     drawBoxes(ctx, f, p, { hot, t: reduced || next === "frozen" ? null : t, dpr }); // a frozen frame stays still
-  });
+  }, active);
 
   return (
     <>
@@ -155,12 +157,14 @@ export interface CameraBlockProps {
   hot: boolean;
   dimmed: boolean;
   onExpand: () => void;
+  /** False while hidden (the camera is expanded): the block stops drawing; the feed goes on. */
+  active?: boolean;
 }
 
-export function CameraBlock({ feed, blind, hot, dimmed, onExpand }: CameraBlockProps) {
+export function CameraBlock({ feed, blind, hot, dimmed, onExpand, active = true }: CameraBlockProps) {
   return (
     <section className={styles.block} data-dimmed={dimmed || undefined} aria-label="Camera">
-      <CameraView feed={feed} blind={blind} hot={hot} expanded={false} onExpandToggle={onExpand} />
+      <CameraView feed={feed} blind={blind} hot={hot} expanded={false} onExpandToggle={onExpand} active={active} />
     </section>
   );
 }
