@@ -1,0 +1,49 @@
+/* Board V2Ended: one ruled bar, the ink "Session complete" tab, the countdown, and CLEAR NOW at the right. */
+
+.bar {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  border: var(--rule) solid var(--ink);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.complete,
+.countdown {
+  padding: 8px 12px;
+}
+
+.complete {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.countdown {
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.clear {
+  padding: 8px 14px;
+  min-height: 36px;
+  border: 0;
+  border-left: var(--rule) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.clear:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.clear:focus-visible {
+  outline: var(--rule) solid var(--ink);
+  outline-offset: 2px;
+}

@@ -1,5 +1,5 @@
 // The Attention block (spec §7): the state word; during a Distraction Episode its time and the three
-// Escalation Ladder squares; while Resting, how to start.
+// Escalation Ladder squares; while Resting, how to start; once a session ended, its summary.
 import type { EpisodeView } from "../protocol.gen";
 import { formatClock } from "../clock/timer";
 import styles from "./MainView.module.css";
@@ -10,7 +10,15 @@ export function ladderStep(episode: EpisodeView): number {
   return Math.min(3, episode.nudges.length + 1);
 }
 
-export function AttentionBlock({ scene, episode, nowS }: { scene: Scene; episode: EpisodeView | null; nowS: number }) {
+export interface AttentionBlockProps {
+  scene: Scene;
+  episode: EpisodeView | null;
+  nowS: number;
+  /** The ended session's summary (clear.ts), shown under COMPLETE. */
+  summary?: string | null;
+}
+
+export function AttentionBlock({ scene, episode, nowS, summary }: AttentionBlockProps) {
   const inSession = scene !== "resting" && scene !== "ended";
   const step = episode !== null && inSession ? ladderStep(episode) : 0;
   return (
@@ -30,6 +38,7 @@ export function AttentionBlock({ scene, episode, nowS }: { scene: Scene; episode
         </span>
       )}
       {scene === "resting" && <span className={styles.hint}>Say “Hey Sonny”.</span>}
+      {scene === "ended" && summary && <span className={styles.hint}>{summary}</span>}
     </section>
   );
 }

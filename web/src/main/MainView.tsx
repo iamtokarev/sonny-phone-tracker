@@ -8,11 +8,14 @@ import type { Envelope } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
 import { AttentionBlock } from "./AttentionBlock";
 import { AttentionStrip } from "./AttentionStrip";
+import { clearInS, endedSummary } from "./clear";
+import { EndedBar } from "./EndedBar";
 import styles from "./MainView.module.css";
 import { buildTimeline, mergeHistory } from "./timeline";
 import { caption, scene, statusLine } from "./view";
 
 export interface MainViewProps {
+  /** As the page shows it: an ended session until it clears (clear.ts). */
   state: LiveState;
   /** Epoch seconds on Sonny's clock. */
   nowS: number;
@@ -23,14 +26,17 @@ export interface MainViewProps {
 export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
   // The strip's records outlive `recent`'s 500-envelope window (see timeline.ts).
   const [history, setHistory] = useState<Envelope[]>([]);
-  const merged = mergeHistory(history, state.recent, state.session);
+  // An ended session (v2 spec §4) shows as it was when it ended, its strip whole and its timer at 0:00.
+  const ended = state.ended;
+  const session = ended?.session ?? state.session;
+  const at = ended?.ended_at ?? nowS;
+  const merged = mergeHistory(history, state.recent, session);
   if (merged !== history) setHistory(merged);
 
-  const session = state.session;
   const s = scene(state);
   const status = statusLine(state, nowS);
   const away = s === "away";
-  const timeline = session === null ? null : buildTimeline(merged, session, nowS);
+  const timeline = session === null ? null : buildTimeline(merged, session, at);
   const paused = session !== null && session.paused_since !== null && s !== "ended";
 
   return (
@@ -52,13 +58,14 @@ export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
           {paused && " · Paused"}
         </span>
         <div className={styles.timer} data-scene={s} aria-label="Time remaining">
-          {formatClock(remainingS(session, nowS) ?? 0)}
+          {formatClock(ended === null ? (remainingS(session, nowS) ?? 0) : 0)}
         </div>
         <AttentionStrip timeline={timeline} durationS={session?.duration_s ?? 1} />
+        {ended !== null && <EndedBar ended={ended} clearInS={clearInS(state, nowS) ?? 0} />}
       </section>
 
       <div className={styles.blocks}>
-        <AttentionBlock scene={s} episode={state.episode} nowS={nowS} />
+        <AttentionBlock scene={s} episode={state.episode} nowS={nowS} summary={ended && endedSummary(ended)} />
         <SonnyBlock phase={state.agent.phase} caption={caption(state)} dimmed={away} />
         <CameraBlock blind={s === "blind"} hot={s === "phone_use"} dimmed={away} />
       </div>

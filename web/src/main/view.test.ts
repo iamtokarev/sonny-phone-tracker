@@ -40,9 +40,11 @@ const live: LiveState = {
 };
 
 describe("scene", () => {
-  it("is Resting with no session, Ended once time is up, else the Attention State", () => {
+  it("is Resting with no session, Ended once time is up or any end, else the Attention State", () => {
     expect(scene({ ...live, session: null, attention: null })).toBe("resting");
     expect(scene({ ...live, session: { ...session, time_up_at: 1_600 }, attention: null })).toBe("ended");
+    const ended = { session, ended_at: 1_300, reason: "ended_by_owner" as const };
+    expect(scene({ ...live, session: null, ended, attention: null })).toBe("ended");
     expect(scene({ ...live, attention: "phone_use" })).toBe("phone_use");
     expect(scene({ ...live, attention: "away" })).toBe("away");
   });

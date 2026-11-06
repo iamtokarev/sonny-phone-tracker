@@ -6,6 +6,7 @@ export type Scene = "resting" | "focused" | "phone_use" | "away" | "blind" | "en
 
 export function scene(state: LiveState): Scene {
   const s = state.session;
+  if (state.ended !== null) return "ended"; // any end, until the page clears it (clear.ts)
   if (s === null) return "resting";
   if (s.time_up_at !== null) return "ended";
   if (s.blind !== null) return "blind";
