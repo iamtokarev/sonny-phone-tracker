@@ -7,20 +7,29 @@ import { useDetailsOpen } from "./toggle";
 
 const DRAWER_ID = "details";
 
-export function DetailsToggle() {
+/** `covered`: the expanded camera hides the drawer (v2 spec §3), so the toggle shows it closed and a click
+ *  opens it (`onOpen` lets the page collapse the camera). */
+export function DetailsToggle({ covered = false, onOpen }: { covered?: boolean; onOpen?: () => void }) {
   const [open, flip] = useDetailsOpen();
+  const shown = open && !covered;
+  const click = () => {
+    if (!open) flip();
+    if (!shown) onOpen?.();
+    else flip();
+  };
   return (
-    <button type="button" className={styles.toggle} aria-expanded={open} aria-controls={DRAWER_ID} onClick={flip}>
-      {open ? "[–]" : "[+]"} Details
+    <button type="button" className={styles.toggle} aria-expanded={shown} aria-controls={DRAWER_ID} onClick={click}>
+      {shown ? "[–]" : "[+]"} Details
     </button>
   );
 }
 
-export function DetailsDrawer() {
+export function DetailsDrawer({ covered = false }: { covered?: boolean }) {
   const [open] = useDetailsOpen();
+  const shown = open && !covered;
   return (
-    <section id={DRAWER_ID} className={styles.drawer} aria-label="Details" hidden={!open}>
-      {open && <DrawerContent />}
+    <section id={DRAWER_ID} className={styles.drawer} aria-label="Details" hidden={!shown}>
+      {shown && <DrawerContent />}
     </section>
   );
 }

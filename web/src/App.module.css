@@ -20,3 +20,14 @@
   --blocks-grow: 1;
   --blocks-min: 220px;
 }
+
+/* The camera expanded (v2 spec §3, board V2Expanded): exactly the tab's height, the camera takes the rest. */
+.page[data-layout="expanded"] {
+  height: 100vh;
+  --blocks-grow: 1;
+}
+
+/* The page takes focus on expand (for Esc); it draws no ring of its own. */
+.page:focus {
+  outline: none;
+}

@@ -6,14 +6,15 @@ import type { Caption } from "../main/view";
 import { drawFigure, type Phase } from "./figure";
 import styles from "./SonnyBlock.module.css";
 
-const PHASE_WORD: Record<Phase, string> = {
+export const PHASE_WORD: Record<Phase, string> = {
   idle: "Idle",
   listening: "Listening",
   thinking: "Thinking",
   speaking: "Speaking",
 };
 
-export function SonnyBlock({ phase, caption, dimmed }: { phase: Phase; caption: Caption; dimmed: boolean }) {
+/** The agent figure for `phase`, drawn on its own canvas (sized by `className`). */
+export function AgentFigure({ phase, className }: { phase: Phase; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const reduced = usePrefersReducedMotion();
   const palette = useRef<ReturnType<typeof readPalette> | null>(null);
@@ -28,10 +29,14 @@ export function SonnyBlock({ phase, caption, dimmed }: { phase: Phase; caption: 
     drawFigure(c.getContext("2d")!, c.width, c.height, phase, reduced ? 0 : t, ink, "rgba(17,17,17,0.07)");
   });
 
+  return <canvas ref={canvas} className={className} aria-hidden="true" />;
+}
+
+export function SonnyBlock({ phase, caption, dimmed }: { phase: Phase; caption: Caption; dimmed: boolean }) {
   return (
     <section className={styles.block} data-dimmed={dimmed || undefined} aria-label="Sonny">
       <div className={styles.agent}>
-        <canvas ref={canvas} className={styles.figure} aria-hidden="true" />
+        <AgentFigure phase={phase} className={styles.figure} />
         <span className={styles.phase} aria-live="polite">
           {PHASE_WORD[phase]}
         </span>

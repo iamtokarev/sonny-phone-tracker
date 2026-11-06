@@ -80,3 +80,8 @@ button {
   font: inherit;
   color: inherit;
 }
+
+/* `hidden` wins over a module's display (the main view hides its normal blocks while the camera is expanded). */
+[hidden] {
+  display: none !important;
+}
