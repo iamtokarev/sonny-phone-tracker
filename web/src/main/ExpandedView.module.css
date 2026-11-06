@@ -1,4 +1,5 @@
-/* The expanded camera, board V2Expanded (v2 spec §3). The chip takes the Attention block's fills. */
+/* The expanded camera, board V2Expanded (v2 spec §3). The chip takes the Attention block's fills
+   (AttentionFill.module.css). */
 
 .bar {
   flex: 0 0 auto;
@@ -39,47 +40,15 @@
   color: var(--muted);
 }
 
-/* ---- the Attention State chip: the Attention block's fills ---- */
+/* ---- the Attention State chip ---- */
 
 .chip {
+  --away-inset: -6px;
   padding: 8px 14px;
   margin-bottom: 6px;
   font-family: var(--font-display);
   font-size: 26px;
   text-transform: uppercase;
-  background: var(--ink);
-  color: var(--paper);
-  transition:
-    background-color 0.5s,
-    color 0.5s;
-}
-
-.chip[data-scene="resting"],
-.chip[data-scene="ended"] {
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.chip[data-scene="phone_use"] {
-  background: var(--accent);
-  color: var(--ink);
-}
-
-.chip[data-scene="away"] {
-  background: var(--paper);
-  color: var(--ink);
-  outline: var(--rule) dashed var(--ink);
-  outline-offset: -6px;
-}
-
-/* Blind: striped, the word haloed in paper so it stays readable. */
-.chip[data-scene="blind"] {
-  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
-  color: var(--ink);
-  text-shadow:
-    0 0 4px var(--paper),
-    0 0 2px var(--paper),
-    0 0 1px var(--paper);
 }
 
 /* ---- episode time and Escalation Ladder, in ink on the page ---- */
@@ -90,27 +59,6 @@
   gap: 6px;
   font-weight: 700;
   padding-bottom: 6px;
-}
-
-.ladder {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.rung {
-  width: 14px;
-  height: 14px;
-  border: var(--rule-list) solid var(--ink);
-}
-
-.rung[data-on] {
-  background: var(--ink);
-}
-
-/* Step 3 is the accent, except during Phone Use (as in the Attention block). */
-.ladder:not([data-scene="phone_use"]) .rung[data-on][data-top] {
-  background: var(--accent);
-  border-color: var(--accent);
 }
 
 /* ---- agent figure and phase ---- */
@@ -162,7 +110,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .timer,
-  .chip,
   .figure {
     transition: none;
   }

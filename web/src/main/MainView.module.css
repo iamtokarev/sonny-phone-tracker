@@ -160,42 +160,12 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  background: var(--ink);
-  color: var(--paper);
-  transition:
-    background-color 0.5s,
-    color 0.5s;
+  /* Its fill, and the ladder's, are AttentionFill.module.css's. */
 }
 
-.attention[data-scene="resting"],
-.attention[data-scene="ended"] {
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.attention[data-scene="phone_use"] {
-  background: var(--accent);
-  color: var(--ink);
-}
-
-.attention[data-scene="away"] {
-  background: var(--paper);
-  color: var(--ink);
-  outline: var(--rule) dashed var(--ink);
-  outline-offset: -10px;
-}
-
-/* Blind: striped; the words sit on paper so they stay readable. */
-.attention[data-scene="blind"] {
-  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
-  color: var(--ink);
-}
-
+/* Blind: the paper-backed words hug their text. */
 .attention[data-scene="blind"] .label,
-.attention[data-scene="blind"] .stateWord > span,
 .attention[data-scene="blind"] .episode {
-  background: var(--paper);
-  padding: 2px 6px;
   align-self: flex-start;
 }
 
@@ -219,32 +189,6 @@
   font-weight: 700;
 }
 
-.ladder {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.rung {
-  width: 14px;
-  height: 14px;
-  border: var(--rule-list) solid currentColor;
-}
-
-.rung[data-on] {
-  background: currentColor;
-}
-
-/* Step 3 is the accent, except on the accent itself (Phone Use), where it stays ink. */
-.rung[data-on][data-top] {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.attention[data-scene="phone_use"] .rung[data-on][data-top] {
-  background: currentColor;
-  border-color: currentColor;
-}
-
 .hint {
   font-weight: 700;
   text-transform: uppercase;
@@ -255,7 +199,6 @@
     animation: none;
   }
   .timer,
-  .attention,
   .stateWord {
     transition: none;
   }

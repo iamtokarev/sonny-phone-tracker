@@ -6,7 +6,8 @@ import type { Phase } from "../agent/figure";
 import { CameraView, type CameraFeed } from "../camera/CameraBlock";
 import { formatClock, remainingS } from "../clock/timer";
 import type { EndedView, EpisodeView, SessionView } from "../protocol.gen";
-import { ladderStep } from "./AttentionBlock";
+import { EscalationLadder, ladderStep } from "./AttentionBlock";
+import fill from "./AttentionFill.module.css";
 import styles from "./ExpandedView.module.css";
 import { attentionWord, type Scene } from "./view";
 
@@ -39,17 +40,13 @@ export function ExpandedView({ session, scene, ended, episode, phase, feed, nowS
             {formatClock(scene === "ended" ? 0 : (remainingS(session, nowS) ?? 0))}
           </span>
         </div>
-        <span className={styles.chip} data-scene={scene} role="status" aria-label="Attention">
-          {attentionWord(scene, ended)}
+        <span className={`${styles.chip} ${fill.fill}`} data-scene={scene} role="status" aria-label="Attention">
+          <span className={fill.onPaper}>{attentionWord(scene, ended)}</span>
         </span>
         {step > 0 && episode !== null && (
           <span className={styles.episode}>
             <span>{formatClock(nowS - episode.started_at)}</span>
-            <span className={styles.ladder} data-scene={scene} aria-label={`Escalation step ${step} of 3`}>
-              {[1, 2, 3].map((n) => (
-                <span key={n} className={styles.rung} data-on={step >= n || undefined} data-top={n === 3 || undefined} />
-              ))}
-            </span>
+            <EscalationLadder step={step} scene={scene} />
           </span>
         )}
         <span className={styles.agent} data-dimmed={scene === "away" || undefined}>
