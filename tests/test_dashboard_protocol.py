@@ -16,7 +16,7 @@ GENERATED = Path(__file__).parents[1] / "web" / "src" / "protocol.gen.ts"
 def test_the_generated_typescript_matches_the_models():
     banner = re.search(r"schema sha256: ([0-9a-f]{64})", GENERATED.read_text())
     assert banner is not None, f"{GENERATED} has no schema hash"
-    assert banner[1] == schema_hash(), "web/src/protocol.gen.ts is stale: run `npm run gen:protocol` in web/"
+    assert banner[1] == schema_hash(), "web/src/protocol.gen.ts is stale: run `bun run gen:protocol` in web/"
 
 
 def test_every_bus_event_type_is_an_envelope_type():

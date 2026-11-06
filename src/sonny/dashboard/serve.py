@@ -19,7 +19,7 @@ def dashboard_url(cfg: Dashboard) -> str:
 def announce(static_dir: Path, url: str) -> bool:
     """Print the Dashboard's URL, or how to build it when `static_dir` has no page yet; whether it is built."""
     if not (static_dir / "index.html").exists():
-        print("Dashboard not built (run npm run build in web/)", flush=True)
+        print("Dashboard not built (run bun run build in web/)", flush=True)
         return False
     print(f"Dashboard: {url}", flush=True)
     return True
