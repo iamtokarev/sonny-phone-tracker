@@ -1,0 +1,169 @@
+/* The expanded camera, board V2Expanded (v2 spec §3). The chip takes the Attention block's fills. */
+
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: var(--rule) solid var(--ink);
+  padding-bottom: 12px;
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.timer {
+  font-family: var(--font-display);
+  font-size: 72px;
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.5s;
+}
+
+.timer[data-scene="resting"],
+.timer[data-scene="ended"] {
+  color: var(--idle);
+}
+
+.timer[data-scene="away"] {
+  color: var(--muted);
+}
+
+/* ---- the Attention State chip: the Attention block's fills ---- */
+
+.chip {
+  padding: 8px 14px;
+  margin-bottom: 6px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  transition:
+    background-color 0.5s,
+    color 0.5s;
+}
+
+.chip[data-scene="resting"],
+.chip[data-scene="ended"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.chip[data-scene="phone_use"] {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.chip[data-scene="away"] {
+  background: var(--paper);
+  color: var(--ink);
+  outline: var(--rule) dashed var(--ink);
+  outline-offset: -6px;
+}
+
+/* Blind: striped, the word haloed in paper so it stays readable. */
+.chip[data-scene="blind"] {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
+  color: var(--ink);
+  text-shadow:
+    0 0 4px var(--paper),
+    0 0 2px var(--paper),
+    0 0 1px var(--paper);
+}
+
+/* ---- episode time and Escalation Ladder, in ink on the page ---- */
+
+.episode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  padding-bottom: 6px;
+}
+
+.ladder {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.rung {
+  width: 14px;
+  height: 14px;
+  border: var(--rule-list) solid var(--ink);
+}
+
+.rung[data-on] {
+  background: var(--ink);
+}
+
+/* Step 3 is the accent, except during Phone Use (as in the Attention block). */
+.ladder:not([data-scene="phone_use"]) .rung[data-on][data-top] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- agent figure and phase ---- */
+
+.agent {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 6px;
+}
+
+.figure {
+  width: 44px;
+  height: 44px;
+  display: block;
+  transition: opacity 0.5s;
+}
+
+.phase {
+  font-family: var(--font-display);
+  font-size: 22px;
+  text-transform: uppercase;
+}
+
+.agent[data-dimmed] .figure {
+  opacity: 0.3;
+}
+
+.agent[data-dimmed] .phase {
+  color: var(--muted);
+}
+
+/* ---- the camera at full width, filling the rest of the window ---- */
+
+.camera {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--rule) solid var(--ink);
+  background: var(--paper);
+}
+
+/* Away: the picture fades, as in the block. */
+.camera[data-dimmed] canvas {
+  opacity: 0.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer,
+  .chip,
+  .figure {
+    transition: none;
+  }
+}

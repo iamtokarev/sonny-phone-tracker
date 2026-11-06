@@ -2,7 +2,7 @@
 // Attention, Sonny and Camera blocks in one row. One screen at 1440x900; Details opens below it.
 import { useState, type ReactNode } from "react";
 import { SonnyBlock } from "../agent/SonnyBlock";
-import { CameraBlock } from "../camera/CameraBlock";
+import { CameraBlock, useCameraFeed } from "../camera/CameraBlock";
 import { formatClock, remainingS } from "../clock/timer";
 import type { Envelope } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
@@ -10,6 +10,7 @@ import { AttentionBlock } from "./AttentionBlock";
 import { AttentionStrip } from "./AttentionStrip";
 import { clearInS, endedSummary } from "./clear";
 import { EndedBar } from "./EndedBar";
+import { ExpandedView } from "./ExpandedView";
 import styles from "./MainView.module.css";
 import { buildTimeline, mergeHistory } from "./timeline";
 import { caption, scene, statusLine } from "./view";
@@ -21,9 +22,14 @@ export interface MainViewProps {
   nowS: number;
   /** The Details toggle, drawn at the right of the header (ticket 08). */
   detailsToggle?: ReactNode;
+  /** The camera fills the page below the header (v2 spec §3); the normal view stays mounted, hidden. */
+  expanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
 }
 
-export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
+export function MainView({ state, nowS, detailsToggle, expanded = false, onExpand, onCollapse }: MainViewProps) {
+  const camera = useCameraFeed(); // one /ws/camera socket for both views
   // The strip's records outlive `recent`'s 500-envelope window (see timeline.ts).
   const [history, setHistory] = useState<Envelope[]>([]);
   // An ended session (v2 spec §4) shows as it was when it ended, its strip whole and its timer at 0:00.
@@ -52,7 +58,19 @@ export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
         </span>
       </header>
 
-      <section className={styles.session} aria-label="Focus Session">
+      {expanded && (
+        <ExpandedView
+          session={session}
+          scene={s}
+          episode={state.episode}
+          phase={state.agent.phase}
+          feed={camera}
+          nowS={nowS}
+          onCollapse={() => onCollapse?.()}
+        />
+      )}
+
+      <section className={styles.session} aria-label="Focus Session" hidden={expanded}>
         <span className={styles.task}>
           {session === null ? "No Focus Session" : `${session.task} / ${formatClock(session.duration_s)} block`}
           {paused && " · Paused"}
@@ -64,10 +82,10 @@ export function MainView({ state, nowS, detailsToggle }: MainViewProps) {
         {ended !== null && <EndedBar ended={ended} clearInS={clearInS(state, nowS) ?? 0} />}
       </section>
 
-      <div className={styles.blocks}>
+      <div className={styles.blocks} hidden={expanded}>
         <AttentionBlock scene={s} episode={state.episode} nowS={nowS} summary={ended && endedSummary(ended)} />
         <SonnyBlock phase={state.agent.phase} caption={caption(state)} dimmed={away} />
-        <CameraBlock blind={s === "blind"} hot={s === "phone_use"} dimmed={away} />
+        <CameraBlock feed={camera} blind={s === "blind"} hot={s === "phone_use"} dimmed={away} onExpand={() => onExpand?.()} />
       </div>
     </div>
   );

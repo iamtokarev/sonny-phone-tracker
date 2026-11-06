@@ -15,8 +15,8 @@ export interface Palette {
   font: string;
 }
 
-/** CSS pixels per dither cell, as on board 02b. */
-const CELL = 4;
+/** CSS pixels per dither cell, as on board 02b (the expanded camera, v2 board V2Expanded, uses 5). */
+export const CELL = 4;
 
 let scratch: HTMLCanvasElement | null = null;
 function scratchCanvas(w: number, h: number): HTMLCanvasElement {
@@ -41,7 +41,14 @@ export function fitCanvas(canvas: HTMLCanvasElement): number {
 }
 
 /** The picture alone, raw or dithered, letterboxed in ink. Redrawn only when the frame, size or mode changes. */
-export function drawPicture(ctx: CanvasRenderingContext2D, frame: CameraFrame, p: Palette, mode: CameraMode, dpr: number) {
+export function drawPicture(
+  ctx: CanvasRenderingContext2D,
+  frame: CameraFrame,
+  p: Palette,
+  mode: CameraMode,
+  dpr: number,
+  cellPx = CELL,
+) {
   const W = ctx.canvas.width;
   const H = ctx.canvas.height;
   const { image } = frame;
@@ -53,7 +60,7 @@ export function drawPicture(ctx: CanvasRenderingContext2D, frame: CameraFrame, p
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(image, fit.x, fit.y, fit.w, fit.h);
   } else {
-    const cell = CELL * dpr;
+    const cell = cellPx * dpr;
     const cw = Math.max(16, Math.floor(fit.w / cell));
     const ch = Math.max(9, Math.floor(fit.h / cell));
     const small = scratchCanvas(cw, ch);

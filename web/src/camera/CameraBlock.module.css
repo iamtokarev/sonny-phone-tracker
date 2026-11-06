@@ -43,13 +43,20 @@
   text-transform: uppercase;
 }
 
+.notice[data-expanded] span {
+  padding: 6px 14px;
+  font-size: 30px;
+}
+
 .controls {
   flex: 0 0 auto;
   display: flex;
   border-top: var(--rule) solid var(--ink);
 }
 
-.toggle {
+/* EXPAND / COLLAPSE is a toggle too (aria-pressed), but stays paper when pressed, as on board V2Expanded. */
+.toggle,
+.expand {
   flex: 1 1 0;
   min-height: 36px;
   padding: 8px 10px;
@@ -62,7 +69,7 @@
   cursor: pointer;
 }
 
-.toggle + .toggle {
+.controls > * + * {
   border-left: var(--rule) solid var(--ink);
 }
 
@@ -71,7 +78,8 @@
   color: var(--paper);
 }
 
-.toggle:focus-visible {
+.toggle:focus-visible,
+.expand:focus-visible {
   outline: var(--rule) solid currentColor;
   outline-offset: -7px;
 }
