@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detailsToggle } from "./toggle";
+import { detailsClick, detailsToggle } from "./toggle";
 
 const memory = (): Pick<Storage, "getItem" | "setItem"> => {
   const items = new Map<string, string>();
@@ -38,5 +38,14 @@ describe("the Details toggle", () => {
     expect(toggle.isOpen()).toBe(false);
     toggle.flip();
     expect(toggle.isOpen()).toBe(true);
+  });
+});
+
+describe("a click on [+] DETAILS", () => {
+  it("closes the drawer when it shows, and otherwise shows it: opening it if closed, uncovering it if covered", () => {
+    expect(detailsClick({ open: true, covered: false })).toEqual({ flip: true, uncover: false });
+    expect(detailsClick({ open: false, covered: false })).toEqual({ flip: true, uncover: true });
+    expect(detailsClick({ open: false, covered: true })).toEqual({ flip: true, uncover: true });
+    expect(detailsClick({ open: true, covered: true })).toEqual({ flip: false, uncover: true });
   });
 });

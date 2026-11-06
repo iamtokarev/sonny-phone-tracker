@@ -3,7 +3,7 @@
 import { useFeed } from "../stream/useFeed";
 import styles from "./Details.module.css";
 import { health, recentEvents, transcript } from "./select";
-import { useDetailsOpen } from "./toggle";
+import { detailsClick, useDetailsOpen } from "./toggle";
 
 const DRAWER_ID = "details";
 
@@ -13,9 +13,9 @@ export function DetailsToggle({ covered = false, onOpen }: { covered?: boolean; 
   const [open, flip] = useDetailsOpen();
   const shown = open && !covered;
   const click = () => {
-    if (!open) flip();
-    if (!shown) onOpen?.();
-    else flip();
+    const does = detailsClick({ open, covered });
+    if (does.flip) flip();
+    if (does.uncover) onOpen?.();
   };
   return (
     <button type="button" className={styles.toggle} aria-expanded={shown} aria-controls={DRAWER_ID} onClick={click}>
