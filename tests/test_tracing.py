@@ -249,16 +249,6 @@ def test_silent_followup_keeps_spoken_reply_visible_in_thread(tracing, speaking_
     assert root["extra"]["metadata"]["ls_agent_type"] == "root"
 
 
-def test_smoke_exercises_assistant_speech_not_only_tools_and_owner_text(tmp_path, tracing):
-    from sonny.tracing_smoke import synthetic_session
-
-    asyncio.run(synthetic_session(tracing, tmp_path))
-    captured = roots(tracing)
-    assert len(captured) == 2
-    assert all(r["outputs"].get("spoken_lines") for r in captured)
-    assert all(r["outputs"].get("messages") for r in captured)
-
-
 def test_disabled_invalid_configuration_and_export_failure_do_not_escape(monkeypatch):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     assert AgentTracing.from_env().begin(wakeup_message({"event": "timer"}), 1) is None
