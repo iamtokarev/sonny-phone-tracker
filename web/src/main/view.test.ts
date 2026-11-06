@@ -11,6 +11,8 @@ const session: SessionView = {
   paused_total_s: 0,
   time_up_at: null,
   blind: null,
+  episodes: 0,
+  nudges: 0,
 };
 const link = {
   blind_spells: 0,
@@ -27,6 +29,8 @@ const live: LiveState = {
   synced: true,
   seq: 10,
   session,
+  ended: null,
+  clear_after_s: 60,
   attention: "focused",
   episode: null,
   agent: { phase: "idle" },

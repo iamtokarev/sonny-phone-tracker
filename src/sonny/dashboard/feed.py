@@ -9,8 +9,9 @@ time, `data` the rest of the record; `seq` rises by one per envelope for the run
 - a `health` envelope every `health_every_s` (`run_health`): link state, camera fps, detect ms, stream lag,
   last LLM latency, reconnects and Blind spells.
 
-`snapshot()` is what a page applies on connect: the session (raw times, so the page ticks the time remaining itself),
-the Attention State, the open Distraction Episode, the agent phase, the latest health, and the last
+`snapshot()` is what a page applies on connect: the session (raw times, so the page ticks the time remaining itself,
+and its Distraction Episodes and Nudges so far), the last session once it ended (with `clear_after_s`, how long the
+page shows it), the Attention State, the open Distraction Episode, the agent phase, the latest health, and the last
 `recent_max` envelopes (and `recent_max` itself, so the page trims `recent` as Sonny does). Health ticks are not
 kept in `recent`; the snapshot carries the latest one.
 """
@@ -56,6 +57,7 @@ class DashboardFeed:
         self._events = bus.subscribe() if bus is not None else None
         self._sent_from_bus: deque[tuple[float, tuple[str, str]]] = deque()  # waiting for their log record
         self._session: dict[str, Any] | None = None
+        self._ended: dict[str, Any] | None = None  # the last session, once it ended, until another starts
         self._attention: str | None = None
         self._episode: dict[str, Any] | None = None
         self._phase = "idle"
@@ -95,6 +97,8 @@ class DashboardFeed:
                 "seq": self._seq,
                 "server_now": self._now(),
                 "session": None if self._session is None else dict(self._session),
+                "ended": None if self._ended is None else {**self._ended, "session": dict(self._ended["session"])},
+                "clear_after_s": float(self.cfg.clear_after_s),
                 "attention": self._attention,
                 "episode": None if self._episode is None else {**self._episode, "nudges": [*self._episode["nudges"]]},
                 "agent": {"phase": self._phase},
@@ -187,26 +191,37 @@ class DashboardFeed:
                 "paused_total_s": 0.0,
                 "time_up_at": None,
                 "blind": None,
+                "episodes": 0,
+                "nudges": 0,
             }
-            self._attention, self._episode = "focused", None
+            self._attention, self._episode, self._ended = "focused", None, None
         elif type == "session.ended":
-            if data.get("reason") == "completed" and s is not None:
+            reason = data.get("reason")
+            if reason == "completed" and s is not None:
                 s["time_up_at"] = t  # the extend grace: the session stays open
                 s["blind"] = None
-                self._attention, self._episode = None, None
             else:
-                self._session, self._attention, self._episode = None, None, None
+                self._session = None
+            if s is not None:
+                self._ended = {"session": dict(s), "ended_at": t, "reason": reason}
+            self._attention, self._episode = None, None
         elif type == "tool_call" and s is not None:
             self._apply_tool(s, t, data.get("name"), data.get("result") or {})
+            if self._ended is not None and s["time_up_at"] is None:
+                self._ended = None  # extended in the grace: the same session goes on
         elif type == "attention" and s is not None:
             self._attention = data.get("state")
             if self._episode is not None and self._attention != "focused":
                 self._episode["kind"] = self._attention
         elif type == "episode_opened":
             self._episode = {"number": data.get("number"), "kind": data.get("kind"), "started_at": t, "nudges": []}
+            if s is not None:
+                s["episodes"] += 1
         elif type == "episode_closed":
             self._episode = None
         elif type == "nudge":
+            if s is not None:
+                s["nudges"] += 1
             if self._episode is not None and data.get("episode") == self._episode["number"]:
                 self._episode["nudges"].append(data.get("intensity"))
         elif type == "blind.started":

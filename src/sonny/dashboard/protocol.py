@@ -347,6 +347,17 @@ class SessionView(BaseModel):
     paused_total_s: float
     time_up_at: float | None  # time's up: the session waits out its extend grace
     blind: str | None  # why the session is Blind, if it is
+    episodes: int  # Distraction Episodes so far
+    nudges: int  # Nudges so far
+
+
+class EndedView(BaseModel):
+    """The last Focus Session, once it ended (any reason), until another starts or an extend continues it.
+    The page shows it, with its summary, for `clear_after_s` after `ended_at`, then clears."""
+
+    session: SessionView  # as it was when it ended
+    ended_at: float  # epoch seconds
+    reason: EndReasonName
 
 
 class EpisodeView(BaseModel):
@@ -366,6 +377,8 @@ class Snapshot(BaseModel):
     seq: int  # the last envelope's seq; replay buffered envelopes with a higher one
     server_now: float
     session: SessionView | None
+    ended: EndedView | None
+    clear_after_s: float  # `[dashboard] clear_after_s`
     attention: AttentionStateName | None
     episode: EpisodeView | None
     agent: AgentView

@@ -6,8 +6,19 @@ import type { Envelope, Snapshot } from "../protocol.gen";
 export type FeedView = Omit<Snapshot, "server_now">;
 
 export function fromSnapshot(snapshot: Snapshot): FeedView {
-  const { seq, session, attention, episode, agent, link, recent, recent_max } = snapshot;
-  return { seq, session, attention, episode, agent, link, recent: recent.slice(-recent_max), recent_max };
+  const { seq, session, ended, clear_after_s, attention, episode, agent, link, recent, recent_max } = snapshot;
+  return {
+    seq,
+    session,
+    ended,
+    clear_after_s,
+    attention,
+    episode,
+    agent,
+    link,
+    recent: recent.slice(-recent_max),
+    recent_max,
+  };
 }
 
 /** The view after one envelope (a new object; the old one is left as it was). */
@@ -30,7 +41,10 @@ export function applyEnvelope(view: FeedView, e: Envelope): FeedView {
         paused_total_s: 0,
         time_up_at: null,
         blind: null,
+        episodes: 0,
+        nudges: 0,
       };
+      next.ended = null;
       next.attention = "focused";
       next.episode = null;
       break;
@@ -40,11 +54,15 @@ export function applyEnvelope(view: FeedView, e: Envelope): FeedView {
       } else {
         next.session = null;
       }
+      if (s !== null) next.ended = { session: next.session ?? s, ended_at: e.t, reason: e.data.reason };
       next.attention = null;
       next.episode = null;
       break;
     case "tool_call":
-      if (s !== null) next.session = applyTool(s, e.t, e.data.name, e.data.result ?? {});
+      if (s !== null) {
+        next.session = applyTool(s, e.t, e.data.name, e.data.result ?? {});
+        if (view.ended !== null && next.session.time_up_at === null) next.ended = null; // extended in the grace
+      }
       break;
     case "attention":
       if (s !== null) {
@@ -54,11 +72,13 @@ export function applyEnvelope(view: FeedView, e: Envelope): FeedView {
       break;
     case "episode_opened":
       next.episode = { number: e.data.number, kind: e.data.kind, started_at: e.t, nudges: [] };
+      if (s !== null) next.session = { ...s, episodes: s.episodes + 1 };
       break;
     case "episode_closed":
       next.episode = null;
       break;
     case "nudge":
+      if (s !== null) next.session = { ...s, nudges: s.nudges + 1 };
       if (view.episode !== null && e.data.episode === view.episode.number) {
         next.episode = { ...view.episode, nudges: [...view.episode.nudges, e.data.intensity] };
       }

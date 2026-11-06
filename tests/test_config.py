@@ -30,6 +30,7 @@ def test_defaults_match_spec():
     assert cfg.media.audio_sample_rate == 16000
     assert (cfg.dashboard.port, cfg.dashboard.open_browser) == (8042, False)
     assert (cfg.dashboard.dev_port, cfg.dashboard.recent_max, cfg.dashboard.health_every_s) == (5173, 500, 1.0)
+    assert cfg.dashboard.clear_after_s == 60
 
 
 def test_every_file_key_reaches_the_typed_object():

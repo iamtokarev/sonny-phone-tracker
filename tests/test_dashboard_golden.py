@@ -2,7 +2,8 @@
 follow the same state rules, so the same envelopes must leave both with the same snapshot.
 
 tests/fixtures/dashboard_golden.json holds hand-written `envelopes` (a Focus Session through Phone Use and Away,
-a Nudge, Pause and resume, Blind, an extend before and after time's up, agent phases, the end) and, produced by
+Nudges, Pause and resume, Blind, an extend before and after time's up, agent phases, the owner's end, then a
+session that ends while Blind and a new one after it) and, produced by
 this file, the snapshot before them (`initial`) and after chosen ones (`expected`, keyed by `seq`), without
 `server_now`. This test checks Python still produces them; web/src/stream/golden.test.ts applies the same
 envelopes in TypeScript and compares. Its `recent_max` is small, so both sides trim `recent` the same way.
@@ -22,7 +23,7 @@ from sonny.dashboard.feed import DashboardFeed
 from sonny.dashboard.protocol import Envelope, Snapshot
 
 FIXTURE = Path(__file__).with_name("fixtures") / "dashboard_golden.json"
-CHECKPOINTS = (1, 4, 5, 7, 10, 11, 12, 13, 15, 17, 18, 19, 21, 22)
+CHECKPOINTS = (1, 4, 5, 7, 8, 10, 11, 12, 13, 15, 17, 18, 19, 20, 21, 22, 23, 26, 27)
 
 
 def run(fixture: dict[str, Any]) -> tuple[list[dict], dict[str, Any], dict[str, dict[str, Any]]]:

@@ -238,6 +238,7 @@ class Dashboard:
     dev_port: int
     recent_max: int
     health_every_s: float
+    clear_after_s: float  # how long the page shows a Focus Session that ended before it clears itself
 
 
 @dataclass(frozen=True)
