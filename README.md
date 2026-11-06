@@ -5,13 +5,28 @@ watches its owner during a declared Focus Session through Sonny's camera, and nu
 when it sees phone use or the owner away from the desk. Vocabulary is in
 [GLOSSARY.md](GLOSSARY.md); decisions are in [docs/adr](docs/adr).
 
+## Setup
+
+On an Apple Silicon Mac, install [mise](https://mise.jdx.dev/installing-mise.html)
+(for example, `brew install mise`), then from a fresh checkout:
+
+```bash
+mise run bootstrap
+```
+
+`bootstrap` installs the tools pinned in `mise.toml`, syncs locked Python and Dashboard dependencies,
+builds the Dashboard and installs pre-commit hooks. uv manages Python 3.12 and `.venv`.
+No shell activation is needed for these commands.
+
 ## Run
 
 Sonny's daemon and this app's `reachy-mini` SDK must be the same version (1.11.0).
 
 ```bash
-uv run sonny
+mise run app
 ```
+
+`mise run start` is an alias for the same command.
 
 The LLM runs on OpenRouter: put `OPENROUTER_API_KEY=...` in a `.env` at the repo root (it is
 git-ignored). The first start downloads the voice models from Hugging Face, and exports RF-DETR
@@ -25,9 +40,8 @@ Session ("Hey Sonny, let's work on my slides for 25 minutes"); in a session you 
 time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctrl-C puts Sonny in
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
-The Dashboard is a page Sonny serves on this Mac while it runs. Build it once with
-[Bun](https://bun.sh): `bun install --frozen-lockfile && bun run build` in `web/` (it writes to
-the git-ignored `src/sonny/static/`); after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
+The Dashboard is a page Sonny serves on this Mac while it runs. The run task builds it into
+the git-ignored `src/sonny/static/`; after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
 Set `open_browser = true` under `[dashboard]` in `src/sonny/sonny.toml` to have it open a tab.
 
 Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
@@ -46,17 +60,20 @@ the whole file and point `SONNY_CONFIG` at the copy.
 ## Develop
 
 ```bash
-uv sync
-uv run pre-commit install
-uv run pytest
+mise run check       # pre-commit, Python tests, frontend checks and build
+mise run test -q     # Python tests only; accepts pytest arguments
+mise run build       # Dashboard typecheck and build
 ```
+
+List tasks with `mise tasks ls`. For other commands, use `mise exec -- <command>`
+(for example, `mise exec -- bun --cwd web run gen:protocol`).
 
 The agent scenarios (`tests/test_agent_scenarios.py`) replay owner lines and session time through
 the real tools and conductor with a scripted agent. To run them against the configured model
 instead (costs OpenRouter credit), after any change to the prompt or model:
 
 ```bash
-SONNY_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
+SONNY_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
 ```
 
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
@@ -64,12 +81,19 @@ Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests
 ### Dashboard without the robot
 
 `sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
-LLM: it replays session logs as the state feed and fills the camera feed. Next to `bun run dev` in
-`web/` (http://127.0.0.1:5173/static/, which proxies `/rpc` and `/ws` to it):
+LLM: it replays session logs as the state feed and fills the camera feed. Start it together with
+Vite at http://127.0.0.1:5173/static/ (which proxies `/rpc` and `/ws` to it):
 
 ```bash
-uv run sonny-dashboard-dev --log logs/session-*.jsonl --speed 10   # replays the logs in order, then loops
-uv run sonny-dashboard-dev --log logs/session-20261103-*.jsonl --webcam  # Mac webcam through the detector
+mise run dev         # placeholder scene; Ctrl-C stops both servers
+```
+
+To replay logs or use the webcam, run `mise run dev:web` in one terminal and the backend
+with arguments in another:
+
+```bash
+mise run dev:backend --log logs/session-*.jsonl --speed 10
+mise run dev:backend --log logs/session-20261103-*.jsonl --webcam
 ```
 
 Without `--webcam` (or `--clip video.mp4`) the camera shows a drawn placeholder scene whose boxes
