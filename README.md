@@ -7,12 +7,15 @@ when it sees phone use or the owner away from the desk. Vocabulary is in
 
 ## Setup
 
-On an Apple Silicon Mac, install [mise](https://mise.jdx.dev/installing-mise.html)
-(for example, `brew install mise`), then from a fresh checkout:
+Install [mise](https://mise.jdx.dev/installing-mise.html) if needed, then bootstrap the checkout:
 
 ```bash
+curl -fsSL https://mise.run | sh
+export PATH="$HOME/.local/bin:$PATH"
 mise run bootstrap
 ```
+
+Keep `~/.local/bin` on your shell's `PATH` for future terminals.
 
 `bootstrap` installs the tools pinned in `mise.toml`, syncs locked Python and Dashboard dependencies,
 builds the Dashboard and installs pre-commit hooks. uv manages Python 3.12 and `.venv`.
