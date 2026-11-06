@@ -1,6 +1,6 @@
 // The main view, board 02b (spec §7): header and status line, task line, timer, attention strip, and the
 // Attention, Sonny and Camera blocks in one row. One screen at 1440x900; Details opens below it.
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { SonnyBlock } from "../agent/SonnyBlock";
 import { CameraBlock, useCameraFeed } from "../camera/CameraBlock";
 import { formatClock, remainingS } from "../clock/timer";
@@ -27,9 +27,11 @@ export interface MainViewProps {
   expanded?: boolean;
   onExpand?: () => void;
   onCollapse?: () => void;
+  /** The Camera block's EXPAND button, for the page to focus after a collapse. */
+  expandButton?: Ref<HTMLButtonElement>;
 }
 
-export function MainView({ state, nowS, detailsToggle, expanded = false, onExpand, onCollapse }: MainViewProps) {
+export function MainView({ state, nowS, detailsToggle, expanded = false, onExpand, onCollapse, expandButton }: MainViewProps) {
   const camera = useCameraFeed(); // one /ws/camera socket for both views
   // The strip's records outlive `recent`'s 500-envelope window (see timeline.ts).
   const [history, setHistory] = useState<Envelope[]>([]);
@@ -93,6 +95,7 @@ export function MainView({ state, nowS, detailsToggle, expanded = false, onExpan
           hot={s === "phone_use"}
           dimmed={away}
           onExpand={() => onExpand?.()}
+          expandButton={expandButton}
           active={!expanded}
         />
       </div>

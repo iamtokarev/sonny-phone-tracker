@@ -3,7 +3,7 @@
 // as frozen. The page holds one camera feed (`useCameraFeed`: the /ws/camera socket, the newest frame and
 // the owner's raw and feed-off choices); the block and the expanded view both draw it with `CameraView`,
 // so expanding or collapsing never reconnects or forgets a choice.
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { readPalette, useAnimationFrame, usePrefersReducedMotion } from "../main/canvas";
 import styles from "./CameraBlock.module.css";
 import { CELL, drawBlank, drawBoxes, drawPicture, drawStatic, fitCanvas, type CameraMode, type Palette } from "./draw";
@@ -78,12 +78,14 @@ export interface CameraViewProps {
   /** Drawn in the expanded view: bigger dither cells and notice, and COLLAPSE instead of EXPAND. */
   expanded: boolean;
   onExpandToggle: () => void;
+  /** The EXPAND / COLLAPSE button. */
+  expandButton?: Ref<HTMLButtonElement>;
   /** False while hidden (the block under the expanded camera): the picture stops drawing. */
   active?: boolean;
 }
 
 /** The picture (letterboxed 16:9), its notice and the RAW, PAUSE FEED and EXPAND / COLLAPSE buttons. */
-export function CameraView({ feed, blind, hot, expanded, onExpandToggle, active = true }: CameraViewProps) {
+export function CameraView({ feed, blind, hot, expanded, onExpandToggle, expandButton, active = true }: CameraViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const base = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null);
   const palette = useRef<Palette | null>(null);
@@ -143,7 +145,7 @@ export function CameraView({ feed, blind, hot, expanded, onExpandToggle, active 
         <button type="button" className={styles.toggle} aria-pressed={paused} onClick={feed.togglePaused}>
           {paused ? "Resume feed" : "Pause feed"}
         </button>
-        <button type="button" className={styles.expand} aria-pressed={expanded} data-camera-expand onClick={onExpandToggle}>
+        <button ref={expandButton} type="button" className={styles.expand} aria-pressed={expanded} onClick={onExpandToggle}>
           <span aria-hidden="true">{expanded ? "[↙]" : "[↗]"}</span> {expanded ? "Collapse · Esc" : "Expand"}
         </button>
       </div>
@@ -157,14 +159,16 @@ export interface CameraBlockProps {
   hot: boolean;
   dimmed: boolean;
   onExpand: () => void;
+  /** The EXPAND button, for the page to focus after a collapse. */
+  expandButton?: Ref<HTMLButtonElement>;
   /** False while hidden (the camera is expanded): the block stops drawing; the feed goes on. */
   active?: boolean;
 }
 
-export function CameraBlock({ feed, blind, hot, dimmed, onExpand, active = true }: CameraBlockProps) {
+export function CameraBlock({ feed, blind, hot, dimmed, onExpand, expandButton, active = true }: CameraBlockProps) {
   return (
     <section className={styles.block} data-dimmed={dimmed || undefined} aria-label="Camera">
-      <CameraView feed={feed} blind={blind} hot={hot} expanded={false} onExpandToggle={onExpand} active={active} />
+      <CameraView feed={feed} blind={blind} hot={hot} expanded={false} onExpandToggle={onExpand} expandButton={expandButton} active={active} />
     </section>
   );
 }
