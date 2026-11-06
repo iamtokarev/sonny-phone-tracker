@@ -203,7 +203,9 @@ class DashboardFeed:
             else:
                 self._session = None
             if s is not None:
-                self._ended = {"session": dict(s), "ended_at": t, "reason": reason}
+                # As state.ts: the session as it stands after this event (open in the grace), else as it was.
+                after = self._session if self._session is not None else s
+                self._ended = {"session": dict(after), "ended_at": t, "reason": reason}
             self._attention, self._episode = None, None
         elif type == "tool_call" and s is not None:
             self._apply_tool(s, t, data.get("name"), data.get("result") or {})
