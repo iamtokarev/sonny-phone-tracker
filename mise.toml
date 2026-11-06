@@ -1,0 +1,68 @@
+[tasks.app]
+description = "Start Sonny with the Dashboard (requires the robot and API key)"
+alias = "start"
+depends = ["build"]
+run = "uv run --locked sonny"
+
+[tools]
+uv = "0.12.5"
+bun = "1.4.3"
+node = "26.7.0"
+
+[tasks.bootstrap]
+description = "Install dependencies, build the Dashboard and install Git hooks"
+run = [
+  { task = "python:install" },
+  { task = "build" },
+  "uv run --locked pre-commit install",
+]
+
+[tasks."python:install"]
+description = "Sync the locked Python environment (uv manages Python)"
+run = "uv sync --locked"
+
+[tasks."web:install"]
+description = "Install locked Dashboard dependencies"
+dir = "web"
+run = "bun install --frozen-lockfile"
+
+[tasks.build]
+description = "Typecheck and build the Dashboard into Sonny's static directory"
+depends = ["web:install"]
+dir = "web"
+run = "bun run build"
+
+[tasks.dev]
+description = "Run the robot-free Dashboard backend and Vite; Ctrl-C stops both"
+run = [{ tasks = ["dev:backend", "dev:web"] }]
+
+[tasks."dev:backend"]
+description = "Run the robot-free backend; accepts --log, --speed, --webcam or --clip"
+depends = ["python:install"]
+run = "uv run --locked sonny-dashboard-dev"
+
+[tasks."dev:web"]
+description = "Run Vite against the backend on port 8042"
+depends = ["web:install"]
+dir = "web"
+run = "bun run dev"
+
+[tasks.test]
+description = "Run Python tests; extra arguments are passed to pytest"
+depends = ["python:install"]
+run = "uv run --locked pytest"
+
+[tasks.lint]
+description = "Run all pre-commit hooks, including Ruff and ESLint"
+depends = ["python:install", "web:install"]
+run = "uv run --locked pre-commit run --all-files --show-diff-on-failure"
+
+[tasks."web:check"]
+description = "Lint, test, check generated protocol types and build the Dashboard"
+depends = ["python:install", "web:install"]
+dir = "web"
+run = ["bun run lint", "bun run test", "bun run check:protocol", "bun run build"]
+
+[tasks.check]
+description = "Run all local checks (live LLM tests remain opt-in)"
+run = [{ task = "lint" }, { tasks = ["test", "web:check"] }]
