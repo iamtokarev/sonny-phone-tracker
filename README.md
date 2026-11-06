@@ -60,6 +60,51 @@ colours its lines with `play_emotion` (18 moves, played on the daemon with their
 Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
 the whole file and point `SONNY_CONFIG` at the copy.
 
+### LangSmith tracing
+
+Set these variables in the repo-root `.env`, then start Sonny normally with `mise run app`:
+
+```dotenv
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your-key
+LANGSMITH_AGENT_ID=your-registered-agent-id
+LANGSMITH_AGENT_ENVIRONMENT=local
+```
+
+Use the endpoint for your LangSmith region and an existing agent in that workspace. Agent addressing
+requires both the agent identifier and environment (`local`, `development`, `staging` or `production`);
+do not combine these with legacy project destination overrides. Set `LANGSMITH_WORKSPACE_ID` too if the
+API key needs an explicit workspace. Existing shell variables take precedence over `.env`.
+
+Each agent wake-up is one `sonny.wakeup` trace. All wake-ups in one Focus Session share a unique
+LangSmith `thread_id`, including the turn that starts it. Pause/resume and extensions during the grace
+period retain the thread; switching Tasks creates a new one, including the switching turn. Idle
+conversations have separate threads. The local `wakeup` log record includes the LangSmith trace ID.
+
+Traces capture the triggering event and state, transcripts, effective system instructions, conversation
+history, tool schemas, model settings and responses, reported token usage, tool arguments/results and
+refusals, model timing/retries, and the line reported by the speech pipeline. Generated text is recorded
+separately from spoken lines and interruptions. No camera frames, raw audio or credentials are uploaded.
+The root run's `messages` and `output` fields show Sonny's spoken reply in LangSmith's conversation and
+turn views; `spoken_lines` retains timing and interruption details. A silent tool-result follow-up
+does not replace the earlier spoken reply.
+
+Trees are held locally until the wake-up finishes, so even its initial model call can be assigned to
+the session it starts. They then export in the background; an abruptly killed process may lose its
+unfinished wake-up. Export failures do not stop Sonny. Orderly shutdown waits at most five seconds for
+tracing. Set `LANGSMITH_TRACING=false` and restart to disable it.
+
+To verify delivery and read back two traces grouped under one thread, run:
+
+```bash
+mise exec -- uv run --locked python -m sonny.tracing_smoke
+```
+
+This writes traces tagged `synthetic` and `tracing-smoke` to the configured LangSmith agent, using fake
+model responses, simulated spoken lines and real session tools. It uses no robot, camera, audio or
+hosted model calls, and prints links after checking spoken output, trace nesting and thread grouping.
+
 ## Develop
 
 ```bash

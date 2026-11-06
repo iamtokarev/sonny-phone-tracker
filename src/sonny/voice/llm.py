@@ -12,15 +12,17 @@ it never surfaces as a pipeline error. The app never switches model.
 import asyncio
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass
 
 from openai import AsyncOpenAI, DefaultAsyncHttpxClient
-from pipecat.frames.frames import Frame, LLMTextFrame
+from pipecat.frames.frames import Frame, FunctionCallCancelFrame, LLMContextFrame, LLMTextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.openrouter.llm import OpenRouterLLMService
 
 from sonny.config import Llm
+from sonny.tracing import TRACE_KEY, AgentTracing, current_wakeup, wakeup_context
 
 
 @dataclass(frozen=True)
@@ -34,9 +36,19 @@ class LlmCall:
 
 
 class CappedOpenRouterLLM(OpenRouterLLMService):
-    def __init__(self, cfg: Llm, *, api_key: str, system_instruction: str, on_call: Callable[[LlmCall], None]) -> None:
+    def __init__(
+        self,
+        cfg: Llm,
+        *,
+        api_key: str,
+        system_instruction: str,
+        on_call: Callable[[LlmCall], None],
+        tracing: AgentTracing | None = None,
+    ) -> None:
         self._cfg = cfg  # read by create_client(), which the base __init__ calls
         self._on_call = on_call
+        self._tracing = tracing or AgentTracing()
+        self._tool_traces = {}
         self._call_start: float | None = None
         self._wakeup_start = 0.0
         self._first_text_s: float | None = None
@@ -52,22 +64,72 @@ class CappedOpenRouterLLM(OpenRouterLLMService):
 
     def create_client(self, api_key=None, base_url=None, **kwargs) -> AsyncOpenAI:
         """An OpenAI client like Pipecat's, with the SDK retry count and a hook counting every request sent."""
-        return AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            max_retries=self._cfg.sdk_max_retries,
-            http_client=DefaultAsyncHttpxClient(event_hooks={"request": [self._count_attempt]}),
+        return self._tracing.wrap_client(
+            AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url,
+                max_retries=self._cfg.sdk_max_retries,
+                http_client=DefaultAsyncHttpxClient(event_hooks={"request": [self._count_attempt]}),
+            )
         )
+
+    async def queue_frame(self, frame, direction=FrameDirection.DOWNSTREAM, callback=None):
+        if isinstance(frame, LLMContextFrame):
+            frame.metadata.setdefault(TRACE_KEY, self._tracing.for_messages(frame.context.get_messages()))
+        await super().queue_frame(frame, direction, callback)
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        trace = frame.metadata.get(TRACE_KEY)
+        with wakeup_context(trace):
+            await super().process_frame(frame, direction)
+
+    async def run_function_calls(self, function_calls):
+        trace = current_wakeup()
+        for call in function_calls:
+            self._tool_traces[call.tool_call_id] = trace
+            if trace is not None:
+                trace.retain()
+        try:
+            await super().run_function_calls(function_calls)
+        except BaseException:
+            for call in function_calls:
+                if (pending := self._tool_traces.pop(call.tool_call_id, None)) is not None:
+                    pending.release()
+            raise
+
+    async def _run_function_call(self, runner_item):
+        trace = self._tool_traces.pop(runner_item.tool_call_id, None)
+        try:
+            with trace.operation() if trace else wakeup_context(None):
+                await super()._run_function_call(runner_item)
+        finally:
+            if trace is not None:
+                trace.release()
 
     async def _count_attempt(self, _request) -> None:
         self._attempts += 1
 
     async def push_frame(self, frame: Frame, direction: FrameDirection = FrameDirection.DOWNSTREAM) -> None:
+        trace = current_wakeup()
+        frame.metadata.setdefault(TRACE_KEY, trace)
+        if (
+            isinstance(frame, FunctionCallCancelFrame)
+            and (pending := self._tool_traces.pop(frame.tool_call_id, None)) is not None
+        ):
+            frame.metadata[TRACE_KEY] = pending
+            pending.release()
+        if isinstance(frame, LLMTextFrame) and trace is not None:
+            trace.text(frame.text)
         if isinstance(frame, LLMTextFrame) and self._call_start is not None and self._first_text_s is None:
             self._first_text_s = time.monotonic() - self._call_start
         await super().push_frame(frame, direction)
 
     async def _process_context(self, context: LLMContext) -> None:
+        trace = current_wakeup()
+        with trace.operation() if trace else nullcontext():
+            await self._capped_context(context)
+
+    async def _capped_context(self, context: LLMContext) -> None:
         self._call_start, self._first_text_s, self._attempts = time.monotonic(), None, 0
         if not _after_tool_results(context):
             self._wakeup_start = self._call_start
@@ -84,16 +146,17 @@ class CappedOpenRouterLLM(OpenRouterLLMService):
         except Exception as e:
             error = f"{type(e).__name__}: {e}"
         finally:
-            self._on_call(
-                LlmCall(
-                    model=self._cfg.model,
-                    ok=error is None,
-                    latency_s=time.monotonic() - self._call_start,
-                    first_text_s=self._first_text_s,
-                    attempts=self._attempts,
-                    error=error,
-                )
+            call = LlmCall(
+                model=self._cfg.model,
+                ok=error is None,
+                latency_s=time.monotonic() - self._call_start,
+                first_text_s=self._first_text_s,
+                attempts=self._attempts,
+                error=error,
             )
+            if (trace := current_wakeup()) is not None:
+                trace.call(asdict(call))
+            self._on_call(call)
             self._call_start = None
 
 

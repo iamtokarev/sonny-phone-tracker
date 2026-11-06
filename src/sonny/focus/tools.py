@@ -21,6 +21,7 @@ from sonny.config import Config
 from sonny.events import EventType
 from sonny.focus.clock import AGENT_HOOKS, FocusClock, Refused
 from sonny.head import MOVES
+from sonny.tracing import current_wakeup
 
 
 class Head(Protocol):
@@ -103,6 +104,7 @@ class SessionTools:
         self.schemas = _schemas(cfg)
         self.tools = ToolsSchema(standard_tools=self.schemas)
         self._write = write  # a log record: write(type, **fields)
+        self._clock = clock
         self._handlers: dict[str, Callable[..., dict]] = {
             "start_session": lambda **args: self._start(clock, head, **args),
             "extend": clock.extend,
@@ -146,7 +148,18 @@ class SessionTools:
         """Sonny said a line in this wake-up."""
         self._nudges.spoke()
 
-    def call(self, name: str, args: dict[str, Any]) -> dict:
+    def call(self, name: str, args: dict[str, Any], *, tool_call_id: str | None = None) -> dict:
+        trace = current_wakeup()
+        if trace is None:
+            return self._call(name, args)
+        with trace.operation(), trace.tool(name, args, tool_call_id) as captured:
+            result = self._call(name, args)
+            captured.update(result)
+            if name == "start_session" and result.get("started") and self._clock.number is not None:
+                trace.adopt_session(self._clock.number)
+            return result
+
+    def _call(self, name: str, args: dict[str, Any]) -> dict:
         handler = self._handlers.get(name)
         try:
             if handler is None:
@@ -165,4 +178,6 @@ class SessionTools:
 
     async def handle(self, params: FunctionCallParams) -> None:
         """The Pipecat handler for every session tool."""
-        await params.result_callback(self.call(params.function_name, dict(params.arguments)))
+        await params.result_callback(
+            self.call(params.function_name, dict(params.arguments), tool_call_id=params.tool_call_id)
+        )
