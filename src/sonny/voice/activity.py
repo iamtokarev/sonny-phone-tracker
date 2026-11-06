@@ -29,8 +29,11 @@ class AgentActivity:
         stuck_after_s: float,
         clock: Callable[[], float] = time.monotonic,
         on_begin: Callable[[], None] = lambda: None,  # the Dashboard's agent phase: thinking
+        on_finish: Callable[[str], None] = lambda reason: None,
     ) -> None:
         self._stuck_after_s, self._clock, self._on_begin = stuck_after_s, clock, on_begin
+        self._on_finish = self._finish_callback = on_finish
+        self._active = False
         self._reset()
 
     def _reset(self) -> None:
@@ -48,13 +51,22 @@ class AgentActivity:
         busy = self._call_due or self._responding or self._tool_calls > 0 or self._line_due
         if busy and self._clock() - self._changed > self._stuck_after_s:
             self._reset()  # a frame we waited for never came (a line TTS never played); don't hold events
+            self._finish("stuck")
             return False
         return busy
 
-    def begin(self) -> None:
+    def begin(self, on_finish: Callable[[str], None] | None = None) -> None:
+        self._finish("interrupted")
+        self._finish_callback = on_finish or self._on_finish
+        self._active = True
         self._call_due = True
         self._changed = self._clock()
         self._on_begin()
+
+    def _finish(self, reason: str) -> None:
+        if self._active:
+            self._active = False
+            self._finish_callback(reason)
 
     def observe(self, frame: Frame) -> None:
         if isinstance(frame, LLMFullResponseStartFrame):
@@ -77,10 +89,13 @@ class AgentActivity:
             self._speaking = self._line_due = False
         elif isinstance(frame, InterruptionFrame):
             self._reset()  # a barge-in: the owner's turn takes over and begins its own wake-up
+            self._finish("interrupted")
             return
         else:
             return
         self._changed = self._clock()
+        if not (self._call_due or self._responding or self._tool_calls or self._line_due or self._speaking):
+            self._finish("completed")
 
 
 class ActivityTap(FrameProcessor):

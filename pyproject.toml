@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "coremltools>=8.0,<10.0",
+    "langsmith>=0.14.9",
     "opencv-python>=5.0.0.93",
     "openwakeword>=0.6.0",
     "parakeet-mlx>=0.5.3",

@@ -43,6 +43,7 @@ from sonny.focus.tools import SessionTools
 from sonny.head import FAILED_TURN_MOVE, HeadOwner
 from sonny.media import MediaHub
 from sonny.session_log import SessionLog
+from sonny.tracing import TRACE_KEY, AgentTracing, WakeupTrace
 from sonny.vision import Camera, VisionWorker
 from sonny.voice.activity import ActivityTap, AgentActivity
 from sonny.voice.gate import MoveCue, MoveGate
@@ -66,12 +67,20 @@ class LineTracker(FrameProcessor):
     """Sits between the LLM and TTS: knows the line Sonny is saying (for the self-wake guard) and
     reports each line when Sonny stops speaking."""
 
-    def __init__(self, on_line: Callable[[SpokenLine], None]) -> None:
+    def __init__(
+        self,
+        on_line: Callable[[SpokenLine], None],
+        pending_trace: Callable[[], WakeupTrace | None] = lambda: None,
+    ) -> None:
         super().__init__()
         self._on_line = on_line
         self._parts: list[str] = []
+        self._line_pending = False
         self._start: float | None = None
         self._interrupted = False
+        self._trace: WakeupTrace | None = None
+        self._speaking_trace: WakeupTrace | None = None
+        self._pending_trace = pending_trace
 
     @property
     def text(self) -> str:
@@ -80,16 +89,37 @@ class LineTracker(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, LLMFullResponseStartFrame):
-            self._parts = []
+            trace = frame.metadata.get(TRACE_KEY)
+            # The follow-up after tool results is normally silent. It can start
+            # before the preceding reply reaches (or finishes at) the speaker.
+            if not self._line_pending or trace is not self._trace:
+                self._parts = []
+                self._line_pending = False
+            self._trace = trace
         elif isinstance(frame, LLMTextFrame):
             self._parts.append(frame.text)
+            self._line_pending = self._line_pending or bool(frame.text.strip())
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._start, self._interrupted = time.time(), False
+            self._speaking_trace = self._trace
         elif isinstance(frame, InterruptionFrame):
             self._interrupted = self._start is not None
+            self._line_pending = False
+            if self._speaking_trace is not None and self._start is not None:
+                self._speaking_trace.line(asdict(SpokenLine(self.text.strip(), self._start, time.time(), True)))
+            # Interruption can discard queued text before this processor sees
+            # it, so release the pending wake-up even when TTS never started.
+            for trace in (self._trace, self._pending_trace()):
+                if trace is not None:
+                    trace.cancel_speech()
         elif isinstance(frame, BotStoppedSpeakingFrame) and self._start is not None:
-            self._on_line(SpokenLine(self.text.strip(), self._start, time.time(), self._interrupted))
+            line = SpokenLine(self.text.strip(), self._start, time.time(), self._interrupted)
+            if self._speaking_trace is not None:
+                self._speaking_trace.line(asdict(line))
+            self._on_line(line)
             self._start = None
+            self._line_pending = False
+            self._speaking_trace = None
         await self.push_frame(frame, direction)
 
 
@@ -117,6 +147,7 @@ class Conversation:
         keep_s: float,
         clock: Callable[[], float] = time.monotonic,
         on_failed_owner_turn: Callable[[], object],  # its result is ignored
+        tracing: AgentTracing | None = None,
     ) -> None:
         self.context = LLMContext(tools=tools.tools) if tools is not None else LLMContext()
         self._tools = tools
@@ -129,6 +160,8 @@ class Conversation:
         self._replying = False  # a wake-up went to the LLM and Sonny hasn't finished answering it
         self._failed_from: int | None = None  # where a failed wake-up starts in the context
         self._cut_line: str | None = None  # the last line, cut off by a barge-in
+        self.tracing = tracing or AgentTracing()
+        self.trace: WakeupTrace | None = None
 
     def _write(self, type: str, **fields) -> None:
         (self._log.session or self._log.idle).write(type, **fields)
@@ -144,6 +177,7 @@ class Conversation:
         ended = self._clock() - self._last_said > self._keep_s
         if seen.new_conversation and ended and not self._replying and self._context_session is None:
             self.context.set_messages([])
+            self.tracing.new_idle()
             self._failed_from = None
             self._write("idle_conversation_started")
         self._emit(Event(EventType.WAKE, {"score": seen.score}))
@@ -175,12 +209,16 @@ class Conversation:
 
     def _begin(self, message: LLMStandardMessage) -> None:
         payload = wakeup_payload(message) or {}
-        self._write("wakeup", payload=payload)
+        session = self._session()
+        if session is None and payload.get("event") == EventType.SESSION_ENDED:
+            session = self._context_session
+        self.trace = self.tracing.begin(message, session)
+        self._write("wakeup", payload=payload, **({"trace_id": str(self.trace.root.id)} if self.trace else {}))
         self._last_said = self._clock()
         if self._tools is not None:
             self._tools.begin_wakeup(payload["event"])
         self._replying = True
-        self._activity.begin()
+        self._activity.begin(on_finish=self.trace.finish if self.trace else None)
 
     def _start_session_context(self) -> None:
         """A session's context holds the conversation that started it. After a Task switch, that is only the
@@ -198,6 +236,7 @@ class Conversation:
         session is open; its `session.started` trims the context instead.)"""
         if self._context_session is not None and self._session() is None:
             self.context.set_messages([])
+            self.tracing.new_idle()
             self._context_session = None
             self._failed_from = self._cut_line = None
 
@@ -300,11 +339,13 @@ class VoicePipeline:
         link: Link,
         camera: Camera | None,
         api_key: str,
+        tracing: AgentTracing | None = None,
     ) -> None:
         self.cfg, self.head = cfg, head
         self.clock = FocusClock(cfg, log, bus, on_nudge=lambda episode, i: self.vision.record_nudge(episode, i))
         self.vision = VisionWorker(cfg, hub, head, self.clock, bus, log, camera=camera)
         self.vision.load()  # before `ready`: the first run exports the CoreML model (~15 s)
+        self.tracing = tracing if tracing is not None else AgentTracing.from_env()
         self.failures = Failures(cfg, self.clock, link, self.vision, bus, log)
         conductor = Conductor(self.clock.snapshot, self.clock.nudges)
         tools = SessionTools(cfg, self.clock, lambda type, **f: (log.session or log.idle).write(type, **f), head=head)
@@ -321,9 +362,10 @@ class VoicePipeline:
             tools=tools,
             keep_s=cfg.idle.conversation_keep_s,
             on_failed_owner_turn=lambda: head.play_now(FAILED_TURN_MOVE, gate.line_pending, source="failed_turn"),
+            tracing=self.tracing,
         )
         rate = cfg.media.audio_sample_rate
-        line = LineTracker(self.conversation.on_line)
+        line = LineTracker(self.conversation.on_line, pending_trace=lambda: self.conversation.trace)
 
         def wake(seen: WakeSeen) -> None:
             self.conversation.on_wake(seen)
@@ -355,7 +397,11 @@ class VoicePipeline:
             ),
         )
         llm = CappedOpenRouterLLM(
-            cfg.llm, api_key=api_key, system_instruction=agent_prompt(cfg), on_call=self.conversation.on_llm_call
+            cfg.llm,
+            api_key=api_key,
+            system_instruction=agent_prompt(cfg),
+            on_call=self.conversation.on_llm_call,
+            tracing=self.tracing,
         )
         for name in tools.names:
             if name != "play_emotion":
@@ -363,7 +409,7 @@ class VoicePipeline:
 
         async def play_emotion(params: FunctionCallParams) -> None:
             """The cue goes down the stream behind the line said so far, before the result lets a new one come."""
-            result = tools.call("play_emotion", dict(params.arguments))
+            result = tools.call("play_emotion", dict(params.arguments), tool_call_id=params.tool_call_id)
             if "playing" in result:
                 await params.llm.push_frame(MoveCue(result["playing"]))
             await params.result_callback(result)
@@ -437,4 +483,7 @@ class VoicePipeline:
                 task.cancel()
             vision_stop.set()
             self.vision.join(self.cfg.media.reader_join_timeout_s)
-            self.failures.release()
+            try:
+                self.failures.release()
+            finally:
+                self.tracing.close()
