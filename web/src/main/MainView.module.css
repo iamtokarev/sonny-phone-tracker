@@ -1,9 +1,12 @@
-/* Board 02b, Raw Brutalist calm. Values from spec §9 via tokens.css. */
+/* Board 02b, Raw Brutalist calm. Values from spec §9 via tokens.css; v2 board V2Main for the layout. */
 
+/* Grows into the page while it fills the window (--blocks-grow, App.module.css); natural height otherwise. */
 .main {
+  flex: var(--blocks-grow) 0 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--page-gap);
 }
 
 /* ---- header ---- */
@@ -83,7 +86,9 @@
   letter-spacing: var(--timer-tracking);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  transition: color 0.5s;
+  transition:
+    font-size var(--size-transition),
+    color 0.5s;
 }
 
 .timer[data-scene="resting"],
@@ -136,17 +141,19 @@
 
 /* ---- the three blocks ---- */
 
+/* Each block is `flex: 1 1 300px` (the camera grows 1.4x): too narrow for three and they wrap. */
 .blocks {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  flex: var(--blocks-grow) 1 auto;
+  min-height: var(--blocks-min);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--rule);
   background: var(--ink);
   border: var(--rule) solid var(--ink);
 }
 
 .attention {
-  grid-column: span 4;
-  min-height: 200px;
+  flex: 1 1 300px;
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -202,6 +209,7 @@
   font-size: var(--state-size);
   line-height: 0.95;
   text-transform: uppercase;
+  transition: font-size var(--size-transition);
 }
 
 .episode {
@@ -247,7 +255,8 @@
     animation: none;
   }
   .timer,
-  .attention {
+  .attention,
+  .stateWord {
     transition: none;
   }
 }

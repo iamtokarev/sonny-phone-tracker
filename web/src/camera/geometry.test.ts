@@ -22,3 +22,20 @@ describe("scaleBox", () => {
     expect(scaleBox({ ...phone, x0: 960, y0: 540, x1: 1920, y1: 1080 }, fit)).toEqual({ x: 720, y: 405, w: 720, h: 405 });
   });
 });
+
+describe("the camera canvas in its block", () => {
+  // CameraBlock.module.css sizes the canvas min(100cqw, 100cqh * 16/9) wide at 16:9, centred: this fit.
+  it("keeps 16:9 with ink bars either side in a wide block", () => {
+    expect(fitFrame(16, 9, 640, 270)).toEqual({ x: 80, y: 0, w: 480, h: 270, scale: 30 });
+  });
+
+  it("keeps 16:9 with ink bars above and below in a tall block", () => {
+    expect(fitFrame(16, 9, 480, 400)).toEqual({ x: 0, y: 65, w: 480, h: 270, scale: 30 });
+  });
+
+  it("puts a 1280x720 frame's boxes on the same picture at any block size", () => {
+    const canvas = fitFrame(16, 9, 640, 270); // 480 x 270 canvas
+    const fit = fitFrame(1280, 720, canvas.w, canvas.h);
+    expect(scaleBox(phone, fit)).toEqual({ x: 240, y: 135, w: 60, h: 90 });
+  });
+});

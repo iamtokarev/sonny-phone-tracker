@@ -1,5 +1,5 @@
 .block {
-  grid-column: span 4;
+  flex: 1 1 300px;
   background: var(--paper);
   padding: 18px;
   display: flex;
@@ -16,16 +16,20 @@
 }
 
 .figure {
-  width: 84px;
-  height: 84px;
+  width: var(--figure-size);
+  height: var(--figure-size);
   display: block;
   flex: 0 0 auto;
-  transition: opacity 0.5s;
+  transition:
+    width var(--size-transition),
+    height var(--size-transition),
+    opacity 0.5s;
 }
 
 .phase {
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: var(--phase-size);
+  transition: font-size var(--size-transition);
   line-height: 1;
   text-transform: uppercase;
 }
@@ -35,6 +39,7 @@
   font-size: var(--caption-size);
   line-height: 1.4;
   color: var(--muted);
+  transition: font-size var(--size-transition);
 }
 
 .caption[data-live] {
@@ -50,4 +55,12 @@
 .block[data-dimmed] .phase,
 .block[data-dimmed] .caption {
   color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .figure,
+  .phase,
+  .caption {
+    transition: none;
+  }
 }
