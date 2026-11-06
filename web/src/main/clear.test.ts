@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EndedView, SessionView } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
 import { applyEnvelope } from "../stream/state";
-import { afterClearing, clearedSessions, clearInS, endedSummary } from "./clear";
+import { afterClearing, clearedSessions, clearInS, endedCopy, endedSummary } from "./clear";
 import { scene } from "./view";
 
 // A 10-minute session from epoch 1000 s that the owner ended at 1400 s (6:40 in), after 2 episodes and 3 Nudges.
@@ -102,6 +102,13 @@ describe("after a Focus Session ends", () => {
     expect(endedSummary({ session: one, ended_at: 1_600, reason: "completed" })).toBe("10:00 · 1 episode · 1 nudge");
     const paused = { ...session, paused_since: 1_300, paused_total_s: 60, episodes: 0, nudges: 0 };
     expect(endedSummary({ session: paused, ended_at: 3_100, reason: "pause_timeout" })).toBe("4:00 · 0 episodes · 0 nudges");
+  });
+
+  it("says COMPLETE when time was up and ENDED for any other end", () => {
+    expect(endedCopy("completed")).toEqual({ headline: "Focus Session complete", word: "Complete" });
+    for (const reason of ["ended_by_owner", "ended_while_blind", "ended_during_sleep", "pause_timeout", "app_quit"] as const) {
+      expect(endedCopy(reason)).toEqual({ headline: "Focus Session ended", word: "Ended" });
+    }
   });
 
   it("still clears when the browser refuses storage", () => {

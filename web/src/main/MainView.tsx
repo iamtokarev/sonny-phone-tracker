@@ -8,7 +8,7 @@ import type { Envelope } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
 import { AttentionBlock } from "./AttentionBlock";
 import { AttentionStrip } from "./AttentionStrip";
-import { clearInS, endedSummary } from "./clear";
+import { clearInS } from "./clear";
 import { EndedBar } from "./EndedBar";
 import { ExpandedView } from "./ExpandedView";
 import styles from "./MainView.module.css";
@@ -62,6 +62,7 @@ export function MainView({ state, nowS, detailsToggle, expanded = false, onExpan
         <ExpandedView
           session={session}
           scene={s}
+          ended={ended}
           episode={state.episode}
           phase={state.agent.phase}
           feed={camera}
@@ -83,7 +84,7 @@ export function MainView({ state, nowS, detailsToggle, expanded = false, onExpan
       </section>
 
       <div className={styles.blocks} hidden={expanded}>
-        <AttentionBlock scene={s} episode={state.episode} nowS={nowS} summary={ended && endedSummary(ended)} />
+        <AttentionBlock scene={s} episode={state.episode} nowS={nowS} ended={ended} />
         <SonnyBlock phase={state.agent.phase} caption={caption(state)} dimmed={away} />
         <CameraBlock feed={camera} blind={s === "blind"} hot={s === "phone_use"} dimmed={away} onExpand={() => onExpand?.()} />
       </div>

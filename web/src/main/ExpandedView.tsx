@@ -5,14 +5,15 @@ import { AgentFigure, PHASE_WORD } from "../agent/SonnyBlock";
 import type { Phase } from "../agent/figure";
 import { CameraView, type CameraFeed } from "../camera/CameraBlock";
 import { formatClock, remainingS } from "../clock/timer";
-import type { EpisodeView, SessionView } from "../protocol.gen";
+import type { EndedView, EpisodeView, SessionView } from "../protocol.gen";
 import { ladderStep } from "./AttentionBlock";
 import styles from "./ExpandedView.module.css";
-import { SCENE_WORD, type Scene } from "./view";
+import { attentionWord, type Scene } from "./view";
 
 export interface ExpandedViewProps {
   session: SessionView | null;
   scene: Scene;
+  ended: EndedView | null;
   episode: EpisodeView | null;
   phase: Phase;
   feed: CameraFeed;
@@ -21,7 +22,7 @@ export interface ExpandedViewProps {
   onCollapse: () => void;
 }
 
-export function ExpandedView({ session, scene, episode, phase, feed, nowS, onCollapse }: ExpandedViewProps) {
+export function ExpandedView({ session, scene, ended, episode, phase, feed, nowS, onCollapse }: ExpandedViewProps) {
   const inSession = scene !== "resting" && scene !== "ended";
   const step = episode !== null && inSession ? ladderStep(episode) : 0;
   const paused = session !== null && session.paused_since !== null && inSession;
@@ -39,7 +40,7 @@ export function ExpandedView({ session, scene, episode, phase, feed, nowS, onCol
           </span>
         </div>
         <span className={styles.chip} data-scene={scene} role="status" aria-label="Attention">
-          {SCENE_WORD[scene]}
+          {attentionWord(scene, ended)}
         </span>
         {step > 0 && episode !== null && (
           <span className={styles.episode}>

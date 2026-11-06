@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Envelope, SessionView } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
-import { caption, scene, statusLine } from "./view";
+import { attentionWord, caption, scene, statusLine } from "./view";
 
 const session: SessionView = {
   task: "Email",
@@ -51,6 +51,15 @@ describe("scene", () => {
 
   it("is Blind during a Blind spell, whatever the last attention was", () => {
     expect(scene({ ...live, attention: "phone_use", session: { ...session, blind: "robot_stream_stalled" } })).toBe("blind");
+  });
+});
+
+describe("attentionWord", () => {
+  it("names the Attention State, and once ended whether time was up", () => {
+    expect(attentionWord("phone_use", null)).toBe("Phone use");
+    expect(attentionWord("ended", { session, ended_at: 1_600, reason: "completed" })).toBe("Complete");
+    expect(attentionWord("ended", { session, ended_at: 1_300, reason: "ended_during_sleep" })).toBe("Ended");
+    expect(attentionWord("ended", null)).toBe("Complete"); // time up, still in the extend grace
   });
 });
 

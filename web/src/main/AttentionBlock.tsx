@@ -1,9 +1,10 @@
 // The Attention block (spec §7): the state word; during a Distraction Episode its time and the three
 // Escalation Ladder squares; while Resting, how to start; once a session ended, its summary.
-import type { EpisodeView } from "../protocol.gen";
+import type { EndedView, EpisodeView } from "../protocol.gen";
 import { formatClock } from "../clock/timer";
+import { endedSummary } from "./clear";
 import styles from "./MainView.module.css";
-import { SCENE_WORD, type Scene } from "./view";
+import { attentionWord, type Scene } from "./view";
 
 /** The ladder step an episode is on: the first square from the start, one more per Nudge, three at most. */
 export function ladderStep(episode: EpisodeView): number {
@@ -14,18 +15,18 @@ export interface AttentionBlockProps {
   scene: Scene;
   episode: EpisodeView | null;
   nowS: number;
-  /** The ended session's summary (clear.ts), shown under COMPLETE. */
-  summary?: string | null;
+  /** The ended session the page shows, if any: its word and its summary (clear.ts). */
+  ended?: EndedView | null;
 }
 
-export function AttentionBlock({ scene, episode, nowS, summary }: AttentionBlockProps) {
+export function AttentionBlock({ scene, episode, nowS, ended = null }: AttentionBlockProps) {
   const inSession = scene !== "resting" && scene !== "ended";
   const step = episode !== null && inSession ? ladderStep(episode) : 0;
   return (
     <section className={styles.attention} data-scene={scene} aria-label="Attention">
       <span className={styles.label}>Attention</span>
       <span className={styles.stateWord} role="status">
-        <span>{SCENE_WORD[scene]}</span>
+        <span>{attentionWord(scene, ended)}</span>
       </span>
       {episode !== null && inSession && (
         <span className={styles.episode}>
@@ -38,7 +39,7 @@ export function AttentionBlock({ scene, episode, nowS, summary }: AttentionBlock
         </span>
       )}
       {scene === "resting" && <span className={styles.hint}>Say “Hey Sonny”.</span>}
-      {scene === "ended" && summary && <span className={styles.hint}>{summary}</span>}
+      {scene === "ended" && ended !== null && <span className={styles.hint}>{endedSummary(ended)}</span>}
     </section>
   );
 }

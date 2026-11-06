@@ -1,4 +1,4 @@
-/* Board V2Ended: one ruled bar, the ink "Session complete" tab, the countdown, and CLEAR NOW at the right. */
+/* Board V2Ended: one ruled bar, the ink "Focus Session complete" (or "ended") tab, the countdown, and CLEAR NOW at the right. */
 
 .bar {
   display: flex;

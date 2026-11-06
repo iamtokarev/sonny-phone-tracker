@@ -28,6 +28,14 @@ export function afterClearing<T extends FeedView>(state: T, nowS: number, cleare
   return { ...state, session: null, ended: null, attention: null, episode: null };
 }
 
+/** What the ended view calls the end: the bar's headline and the Attention block's word. Time up
+ *  completes a Focus Session; any other end (the owner, Blind, Mac sleep, a long Pause, quitting) ends it. */
+export function endedCopy(reason: EndedView["reason"]): { headline: string; word: string } {
+  return reason === "completed"
+    ? { headline: "Focus Session complete", word: "Complete" }
+    : { headline: "Focus Session ended", word: "Ended" };
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** `<how long it ran> · <N> episodes · <N> nudges`; how long it ran leaves out its Pauses. */
