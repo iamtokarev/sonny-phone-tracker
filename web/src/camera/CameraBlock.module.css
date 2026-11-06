@@ -1,18 +1,26 @@
 .block {
-  grid-column: span 4;
+  flex: 1.4 1 300px;
   background: var(--paper);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   min-width: 0;
 }
 
+/* A size container the block's height gives it; the canvas keeps 16:9 inside, on ink letterbox bars.
+   The boxes follow the canvas (geometry.ts), so they stay on the picture at any size. */
 .view {
+  flex: 1 1 auto;
+  min-height: 120px;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink);
+  container-type: size;
 }
 
 .canvas {
-  width: 100%;
+  width: min(100cqw, calc(100cqh * 16 / 9));
   aspect-ratio: 16 / 9;
   display: block;
   background: var(--ink);
@@ -35,12 +43,20 @@
   text-transform: uppercase;
 }
 
+.notice[data-expanded] span {
+  padding: 6px 14px;
+  font-size: 30px;
+}
+
 .controls {
+  flex: 0 0 auto;
   display: flex;
   border-top: var(--rule) solid var(--ink);
 }
 
-.toggle {
+/* EXPAND / COLLAPSE is a toggle too (aria-pressed), but stays paper when pressed, as on board V2Expanded. */
+.toggle,
+.expand {
   flex: 1 1 0;
   min-height: 36px;
   padding: 8px 10px;
@@ -53,7 +69,7 @@
   cursor: pointer;
 }
 
-.toggle + .toggle {
+.controls > * + * {
   border-left: var(--rule) solid var(--ink);
 }
 
@@ -62,7 +78,8 @@
   color: var(--paper);
 }
 
-.toggle:focus-visible {
+.toggle:focus-visible,
+.expand:focus-visible {
   outline: var(--rule) solid currentColor;
   outline-offset: -7px;
 }

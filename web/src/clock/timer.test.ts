@@ -11,6 +11,8 @@ const session = (over: Partial<SessionView> = {}): SessionView => ({
   paused_total_s: 0,
   time_up_at: null,
   blind: null,
+  episodes: 0,
+  nudges: 0,
   ...over,
 });
 

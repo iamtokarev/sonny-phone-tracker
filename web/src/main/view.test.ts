@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Envelope, SessionView } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
-import { caption, scene, statusLine } from "./view";
+import { attentionWord, caption, scene, statusLine } from "./view";
 
 const session: SessionView = {
   task: "Email",
@@ -11,6 +11,8 @@ const session: SessionView = {
   paused_total_s: 0,
   time_up_at: null,
   blind: null,
+  episodes: 0,
+  nudges: 0,
 };
 const link = {
   blind_spells: 0,
@@ -27,6 +29,8 @@ const live: LiveState = {
   synced: true,
   seq: 10,
   session,
+  ended: null,
+  clear_after_s: 60,
   attention: "focused",
   episode: null,
   agent: { phase: "idle" },
@@ -36,15 +40,26 @@ const live: LiveState = {
 };
 
 describe("scene", () => {
-  it("is Resting with no session, Ended once time is up, else the Attention State", () => {
+  it("is Resting with no session, Ended once time is up or any end, else the Attention State", () => {
     expect(scene({ ...live, session: null, attention: null })).toBe("resting");
     expect(scene({ ...live, session: { ...session, time_up_at: 1_600 }, attention: null })).toBe("ended");
+    const ended = { session, ended_at: 1_300, reason: "ended_by_owner" as const };
+    expect(scene({ ...live, session: null, ended, attention: null })).toBe("ended");
     expect(scene({ ...live, attention: "phone_use" })).toBe("phone_use");
     expect(scene({ ...live, attention: "away" })).toBe("away");
   });
 
   it("is Blind during a Blind spell, whatever the last attention was", () => {
     expect(scene({ ...live, attention: "phone_use", session: { ...session, blind: "robot_stream_stalled" } })).toBe("blind");
+  });
+});
+
+describe("attentionWord", () => {
+  it("names the Attention State, and once ended whether time was up", () => {
+    expect(attentionWord("phone_use", null)).toBe("Phone use");
+    expect(attentionWord("ended", { session, ended_at: 1_600, reason: "completed" })).toBe("Complete");
+    expect(attentionWord("ended", { session, ended_at: 1_300, reason: "ended_during_sleep" })).toBe("Ended");
+    expect(attentionWord("ended", null)).toBe("Complete"); // time up, still in the extend grace
   });
 });
 

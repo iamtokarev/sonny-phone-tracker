@@ -1,0 +1,69 @@
+/* The Attention State's fills and the Escalation Ladder (board 02b), in one place for the Attention block and
+   the expanded camera's chip: a palette change is one edit here. The element carries `data-scene`. */
+
+.fill {
+  background: var(--ink);
+  color: var(--paper);
+  transition:
+    background-color 0.5s,
+    color 0.5s;
+}
+
+.fill[data-scene="resting"],
+.fill[data-scene="ended"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.fill[data-scene="phone_use"] {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+/* Away: paper inside a dashed ink rule, inset by --away-inset. */
+.fill[data-scene="away"] {
+  background: var(--paper);
+  color: var(--ink);
+  outline: var(--rule) dashed var(--ink);
+  outline-offset: var(--away-inset, -10px);
+}
+
+/* Blind: striped; the words sit on paper so they stay readable. */
+.fill[data-scene="blind"] {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
+  color: var(--ink);
+}
+
+.fill[data-scene="blind"] .onPaper {
+  background: var(--paper);
+  padding: 2px 6px;
+}
+
+/* ---- the Escalation Ladder, in the colour of the words around it (`data-scene` on the ladder) ---- */
+
+.ladder {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.rung {
+  width: 14px;
+  height: 14px;
+  border: var(--rule-list) solid currentColor;
+}
+
+.rung[data-on] {
+  background: currentColor;
+}
+
+/* Step 3 is the accent, except during Phone Use, where the accent is the fill: it stays the words' colour. */
+.ladder:not([data-scene="phone_use"]) .rung[data-on][data-top] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

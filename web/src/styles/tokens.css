@@ -49,6 +49,14 @@
   --state-size: 46px;
   --body-size: 12px;
   --caption-size: 15px;
+  --figure-size: 84px;
+  --phase-size: 30px;
+
+  /* Layout (App.module.css swaps these, and the sizes above, while the page fills the window). */
+  --page-gap: clamp(14px, 2vh, 28px);
+  --blocks-grow: 0;
+  --blocks-min: 240px;
+  --size-transition: 0.35s ease;
 }
 
 *,
@@ -71,4 +79,9 @@ body {
 button {
   font: inherit;
   color: inherit;
+}
+
+/* `hidden` wins over a module's display (the main view hides its normal blocks while the camera is expanded). */
+[hidden] {
+  display: none !important;
 }

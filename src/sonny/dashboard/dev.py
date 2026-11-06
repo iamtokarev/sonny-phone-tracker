@@ -1,4 +1,4 @@
-"""The Dashboard without the robot (spec §10): `uv run sonny-dashboard-dev`, next to `npm run dev` in web/.
+"""The Dashboard without the robot (spec §10): `uv run sonny-dashboard-dev`, next to `bun run dev` in web/.
 
 The same FastAPI routes Sonny serves (the base class's `/` and `/static`, `/rpc`, `/ws/camera`) on the same port,
 the same `DashboardFeed` and `CameraFeed`, fed by:
@@ -279,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     feed.run_health(stop, lambda: Readings(None, loop.frames, loop.frame_t or None))
 
     announce(sonny.main.STATIC_DIR, dashboard_url(cfg.dashboard))
-    print(f"With npm run dev in web/: http://{HOST}:{cfg.dashboard.dev_port}/static/", flush=True)
+    print(f"With bun run dev in web/: http://{HOST}:{cfg.dashboard.dev_port}/static/", flush=True)
     try:
         uvicorn.run(app, host=HOST, port=cfg.dashboard.port, log_level="warning")
     finally:

@@ -23,6 +23,6 @@ logs/
 .DS_Store
 models/
 
-# The built Dashboard (`npm run build` in web/) and its dependencies
+# The built Dashboard (`bun run build` in web/) and its dependencies
 src/sonny/static/
 web/node_modules/

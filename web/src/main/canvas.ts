@@ -32,17 +32,33 @@ export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(subscribeMotion, () => window.matchMedia(REDUCE).matches);
 }
 
-/** Calls the latest `draw(seconds)` on every animation frame while mounted. */
-export function useAnimationFrame(draw: (t: number) => void) {
+/** requestAnimationFrame and cancelAnimationFrame. */
+export interface Frames {
+  request(cb: FrameRequestCallback): number;
+  cancel(id: number): void;
+}
+
+const browserFrames: Frames = {
+  request: (cb) => requestAnimationFrame(cb),
+  cancel: (id) => cancelAnimationFrame(id),
+};
+
+/** Calls `draw(seconds)` on every animation frame until the returned stop; nothing at all while inactive. */
+export function frameLoop(active: boolean, draw: (t: number) => void, frames: Frames = browserFrames): () => void {
+  if (!active) return () => {};
+  let id = frames.request(function loop(now) {
+    draw(now / 1000);
+    id = frames.request(loop);
+  });
+  return () => frames.cancel(id);
+}
+
+/** Calls the latest `draw(seconds)` on every animation frame while mounted and `active` (a hidden canvas,
+ *  such as the normal view's under the expanded camera, passes false and draws nothing). */
+export function useAnimationFrame(draw: (t: number) => void, active = true) {
   const latest = useRef(draw);
   useEffect(() => {
     latest.current = draw;
   });
-  useEffect(() => {
-    let id = requestAnimationFrame(function loop(now) {
-      latest.current(now / 1000);
-      id = requestAnimationFrame(loop);
-    });
-    return () => cancelAnimationFrame(id);
-  }, []);
+  useEffect(() => frameLoop(active, (t) => latest.current(t)), [active]);
 }

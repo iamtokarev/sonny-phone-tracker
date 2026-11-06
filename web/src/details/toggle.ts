@@ -38,6 +38,15 @@ export function detailsToggle(storage: Storage | null): DetailsToggleStore {
   };
 }
 
+/** What a click on the toggle does. The drawer shows when it is open and not covered by the expanded camera:
+ *  a click then closes it. Otherwise the click shows it: it opens the drawer if closed, and asks the page to
+ *  uncover it (collapse the camera). */
+export function detailsClick({ open, covered }: { open: boolean; covered: boolean }): { flip: boolean; uncover: boolean } {
+  const shown = open && !covered;
+  if (shown) return { flip: true, uncover: false };
+  return { flip: !open, uncover: true };
+}
+
 function browserStorage(): Storage | null {
   try {
     return typeof window === "undefined" ? null : window.localStorage;

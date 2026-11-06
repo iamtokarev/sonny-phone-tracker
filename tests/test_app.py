@@ -189,7 +189,7 @@ def test_without_a_dashboard_build_sonny_still_starts_and_says_so(app, monkeypat
     app.run(mini, StopAfterReady())
     out = capsys.readouterr().out
     assert "ready" in out
-    assert "Dashboard not built (run npm run build in web/)" in out
+    assert "Dashboard not built (run bun run build in web/)" in out
     assert "Dashboard: http" not in out
 
 

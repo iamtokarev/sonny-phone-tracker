@@ -165,3 +165,4 @@ camera_idle_fps = 5  # outside a session (or in a Pause): raw frames, no boxes
 dev_port = 5173  # the Vite dev server (web/), whose pages may also open Sonny's sockets; any other site may not
 recent_max = 500  # envelopes `sonny.snapshot` hands a page that connects (its `recent`)
 health_every_s = 1.0  # how often the state feed sends a `health` envelope (link, fps, detect ms, lag, LLM s)
+clear_after_s = 60  # how long the page shows a session that ended (its summary) before it clears to resting

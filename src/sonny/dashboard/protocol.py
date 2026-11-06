@@ -1,6 +1,6 @@
 """The state feed's wire types (spec §4), shared with the page as `web/src/protocol.gen.ts`.
 
-Pydantic models → JSON Schema (`schema_json()`) → json-schema-to-typescript (`npm run gen:protocol` in web/).
+Pydantic models → JSON Schema (`schema_json()`) → json-schema-to-typescript (`bun run gen:protocol` in web/).
 `DashboardFeed` builds plain dicts; these models say what they hold, and the tests validate the feed against them.
 An `Envelope` is a union discriminated on `type`, the log record's or `EventType`'s string verbatim. Records
 the page only lists (moves, hooks, wake-up payloads) carry their fields untyped.
@@ -347,6 +347,17 @@ class SessionView(BaseModel):
     paused_total_s: float
     time_up_at: float | None  # time's up: the session waits out its extend grace
     blind: str | None  # why the session is Blind, if it is
+    episodes: int  # Distraction Episodes so far
+    nudges: int  # Nudges so far
+
+
+class EndedView(BaseModel):
+    """The last Focus Session, once it ended (any reason), until another starts or an extend continues it.
+    The page shows it, with its summary, for `clear_after_s` after `ended_at`, then clears."""
+
+    session: SessionView  # as it was when it ended
+    ended_at: float  # epoch seconds
+    reason: EndReasonName
 
 
 class EpisodeView(BaseModel):
@@ -366,6 +377,8 @@ class Snapshot(BaseModel):
     seq: int  # the last envelope's seq; replay buffered envelopes with a higher one
     server_now: float
     session: SessionView | None
+    ended: EndedView | None
+    clear_after_s: float  # `[dashboard] clear_after_s`
     attention: AttentionStateName | None
     episode: EpisodeView | None
     agent: AgentView

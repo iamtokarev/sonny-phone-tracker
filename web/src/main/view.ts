@@ -1,11 +1,14 @@
 // The main view's state rules (spec §7), read off the live feed.
+import type { EndedView } from "../protocol.gen";
 import type { LiveState } from "../stream/feed";
+import { endedCopy } from "./clear";
 
 /** Which of board 02b's states the page is in. */
 export type Scene = "resting" | "focused" | "phone_use" | "away" | "blind" | "ended";
 
 export function scene(state: LiveState): Scene {
   const s = state.session;
+  if (state.ended !== null) return "ended"; // any end, until the page clears it (clear.ts)
   if (s === null) return "resting";
   if (s.time_up_at !== null) return "ended";
   if (s.blind !== null) return "blind";
@@ -20,6 +23,11 @@ export const SCENE_WORD: Record<Scene, string> = {
   blind: "Blind",
   ended: "Complete",
 };
+
+/** The Attention block's word for `scene`; once ended, COMPLETE when time was up and ENDED otherwise. */
+export function attentionWord(scene: Scene, ended: EndedView | null): string {
+  return scene === "ended" ? endedCopy(ended?.reason ?? "completed").word : SCENE_WORD[scene];
+}
 
 export interface StatusLine {
   text: string;

@@ -43,6 +43,8 @@ const EMPTY: LiveState = {
   synced: false,
   seq: 0,
   session: null,
+  ended: null,
+  clear_after_s: 0, // until the first snapshot says
   attention: null,
   episode: null,
   agent: { phase: "idle" },

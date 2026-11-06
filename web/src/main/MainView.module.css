@@ -1,9 +1,12 @@
-/* Board 02b, Raw Brutalist calm. Values from spec §9 via tokens.css. */
+/* Board 02b, Raw Brutalist calm. Values from spec §9 via tokens.css; v2 board V2Main for the layout. */
 
+/* Grows into the page while it fills the window (--blocks-grow, App.module.css); natural height otherwise. */
 .main {
+  flex: var(--blocks-grow) 0 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--page-gap);
 }
 
 /* ---- header ---- */
@@ -83,7 +86,9 @@
   letter-spacing: var(--timer-tracking);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  transition: color 0.5s;
+  transition:
+    font-size var(--size-transition),
+    color 0.5s;
 }
 
 .timer[data-scene="resting"],
@@ -136,59 +141,31 @@
 
 /* ---- the three blocks ---- */
 
+/* Each block is `flex: 1 1 300px` (the camera grows 1.4x): too narrow for three and they wrap. */
 .blocks {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  flex: var(--blocks-grow) 1 auto;
+  min-height: var(--blocks-min);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--rule);
   background: var(--ink);
   border: var(--rule) solid var(--ink);
 }
 
 .attention {
-  grid-column: span 4;
-  min-height: 200px;
+  flex: 1 1 300px;
   padding: 18px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  background: var(--ink);
-  color: var(--paper);
-  transition:
-    background-color 0.5s,
-    color 0.5s;
+  /* Its fill, and the ladder's, are AttentionFill.module.css's. */
 }
 
-.attention[data-scene="resting"],
-.attention[data-scene="ended"] {
-  background: var(--paper);
-  color: var(--ink);
-}
-
-.attention[data-scene="phone_use"] {
-  background: var(--accent);
-  color: var(--ink);
-}
-
-.attention[data-scene="away"] {
-  background: var(--paper);
-  color: var(--ink);
-  outline: var(--rule) dashed var(--ink);
-  outline-offset: -10px;
-}
-
-/* Blind: striped; the words sit on paper so they stay readable. */
-.attention[data-scene="blind"] {
-  background: repeating-linear-gradient(90deg, var(--ink) 0 3px, var(--paper) 3px 9px);
-  color: var(--ink);
-}
-
+/* Blind: the paper-backed words hug their text. */
 .attention[data-scene="blind"] .label,
-.attention[data-scene="blind"] .stateWord > span,
 .attention[data-scene="blind"] .episode {
-  background: var(--paper);
-  padding: 2px 6px;
   align-self: flex-start;
 }
 
@@ -202,6 +179,7 @@
   font-size: var(--state-size);
   line-height: 0.95;
   text-transform: uppercase;
+  transition: font-size var(--size-transition);
 }
 
 .episode {
@@ -209,32 +187,6 @@
   align-items: center;
   gap: 6px;
   font-weight: 700;
-}
-
-.ladder {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.rung {
-  width: 14px;
-  height: 14px;
-  border: var(--rule-list) solid currentColor;
-}
-
-.rung[data-on] {
-  background: currentColor;
-}
-
-/* Step 3 is the accent, except on the accent itself (Phone Use), where it stays ink. */
-.rung[data-on][data-top] {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.attention[data-scene="phone_use"] .rung[data-on][data-top] {
-  background: currentColor;
-  border-color: currentColor;
 }
 
 .hint {
@@ -247,7 +199,7 @@
     animation: none;
   }
   .timer,
-  .attention {
+  .stateWord {
     transition: none;
   }
 }

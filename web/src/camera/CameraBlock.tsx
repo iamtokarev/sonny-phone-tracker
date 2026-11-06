@@ -1,27 +1,38 @@
-// The Camera block (spec §7, §8): what Sonny's camera sees, dithered by default, with RAW / DITHER and
-// PAUSE FEED / RESUME FEED. Blind shows static; no new frame for 2 s shows the feed as frozen.
-import { useEffect, useRef, useState } from "react";
+// The Camera block (spec §7, §8): what Sonny's camera sees, dithered by default, with RAW / DITHER,
+// PAUSE FEED / RESUME FEED and (v2 spec §3) EXPAND. Blind shows static; no new frame for 2 s shows the feed
+// as frozen. The page holds one camera feed (`useCameraFeed`: the /ws/camera socket, the newest frame and
+// the owner's raw and feed-off choices); the block and the expanded view both draw it with `CameraView`,
+// so expanding or collapsing never reconnects or forgets a choice.
+import { useEffect, useRef, useState, type Ref, type RefObject } from "react";
 import { readPalette, useAnimationFrame, usePrefersReducedMotion } from "../main/canvas";
 import styles from "./CameraBlock.module.css";
-import { drawBlank, drawBoxes, drawPicture, drawStatic, fitCanvas, type CameraMode, type Palette } from "./draw";
+import { CELL, drawBlank, drawBoxes, drawPicture, drawStatic, fitCanvas, type CameraMode, type Palette } from "./draw";
 import { pageFeedOff } from "./feedOff";
 import { cameraUrl, connectCamera, type CameraClient, type CameraFrame } from "./socket";
 
 /** Seconds without a new frame before the feed shows as frozen (spec §5). */
 export const FROZEN_AFTER_S = 2;
 
+/** CSS pixels per dither cell in the expanded camera (board V2Expanded). */
+const EXPANDED_CELL = 5;
+
 type Notice = "paused" | "frozen" | "none" | null;
 
-export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boolean; dimmed: boolean }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
+export interface CameraFeed {
+  /** The newest decoded frame, or null (none yet, or the feed is off). */
+  frame: RefObject<CameraFrame | null>;
+  mode: CameraMode;
+  toggleMode(): void;
+  paused: boolean;
+  togglePaused(): void;
+}
+
+/** The page's /ws/camera feed. Call once, above whatever draws it. */
+export function useCameraFeed(): CameraFeed {
   const client = useRef<CameraClient | null>(null);
   const frame = useRef<CameraFrame | null>(null);
-  const base = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null);
-  const palette = useRef<Palette | null>(null);
   const [mode, setMode] = useState<CameraMode>("dither");
   const [paused, setPaused] = useState(pageFeedOff.read); // a reload keeps the owner's PAUSE FEED
-  const [notice, setNotice] = useState<Notice>(null);
-  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     const startPaused = pageFeedOff.read();
@@ -51,6 +62,37 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
     }
   }, [paused]);
 
+  return {
+    frame,
+    mode,
+    toggleMode: () => setMode((m) => (m === "raw" ? "dither" : "raw")),
+    paused,
+    togglePaused: () => setPaused((v) => !v),
+  };
+}
+
+export interface CameraViewProps {
+  feed: CameraFeed;
+  blind: boolean;
+  hot: boolean;
+  /** Drawn in the expanded view: bigger dither cells and notice, and COLLAPSE instead of EXPAND. */
+  expanded: boolean;
+  onExpandToggle: () => void;
+  /** The EXPAND / COLLAPSE button. */
+  expandButton?: Ref<HTMLButtonElement>;
+  /** False while hidden (the block under the expanded camera): the picture stops drawing. */
+  active?: boolean;
+}
+
+/** The picture (letterboxed 16:9), its notice and the RAW, PAUSE FEED and EXPAND / COLLAPSE buttons. */
+export function CameraView({ feed, blind, hot, expanded, onExpandToggle, expandButton, active = true }: CameraViewProps) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const base = useRef<{ canvas: HTMLCanvasElement; key: string } | null>(null);
+  const palette = useRef<Palette | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+  const reduced = usePrefersReducedMotion();
+  const { mode, paused } = feed;
+
   useAnimationFrame((t) => {
     const c = canvas.current;
     if (c === null) return;
@@ -58,7 +100,7 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
     palette.current ??= readPalette();
     const p = palette.current;
     const ctx = c.getContext("2d")!;
-    const f = frame.current;
+    const f = feed.frame.current;
     const age = f === null ? Infinity : Date.now() / 1000 - f.header.t;
     const next: Notice = paused ? "paused" : blind ? null : f === null ? "none" : age > FROZEN_AFTER_S ? "frozen" : null;
     if (next !== notice) setNotice(next);
@@ -74,36 +116,59 @@ export function CameraBlock({ blind, hot, dimmed }: { blind: boolean; hot: boole
     if (b.key !== key) {
       b.canvas.width = c.width;
       b.canvas.height = c.height;
-      drawPicture(b.canvas.getContext("2d")!, f, p, mode, dpr);
+      drawPicture(b.canvas.getContext("2d")!, f, p, mode, dpr, expanded ? EXPANDED_CELL : CELL);
       b.key = key;
     }
     ctx.drawImage(b.canvas, 0, 0);
     drawBoxes(ctx, f, p, { hot, t: reduced || next === "frozen" ? null : t, dpr }); // a frozen frame stays still
-  });
+  }, active);
 
   return (
-    <section className={styles.block} data-dimmed={dimmed || undefined} aria-label="Camera">
+    <>
       <div className={styles.view}>
-        <canvas ref={canvas} className={styles.canvas} role="img" aria-label="What Sonny's camera sees, with detection boxes" />
+        <canvas
+          ref={canvas}
+          className={styles.canvas}
+          role="img"
+          aria-label={expanded ? "What Sonny's camera sees, expanded, with detection boxes" : "What Sonny's camera sees, with detection boxes"}
+        />
         {notice !== null && (
-          <div className={styles.notice}>
+          <div className={styles.notice} data-expanded={expanded || undefined}>
             <span>{notice === "paused" ? "Feed paused" : notice === "frozen" ? "Feed frozen" : "No feed"}</span>
           </div>
         )}
       </div>
       <div className={styles.controls}>
-        <button
-          type="button"
-          className={styles.toggle}
-          aria-pressed={mode === "raw"}
-          onClick={() => setMode((m) => (m === "raw" ? "dither" : "raw"))}
-        >
+        <button type="button" className={styles.toggle} aria-pressed={mode === "raw"} onClick={feed.toggleMode}>
           {mode === "raw" ? "Dither" : "Raw"}
         </button>
-        <button type="button" className={styles.toggle} aria-pressed={paused} onClick={() => setPaused((v) => !v)}>
+        <button type="button" className={styles.toggle} aria-pressed={paused} onClick={feed.togglePaused}>
           {paused ? "Resume feed" : "Pause feed"}
         </button>
+        <button ref={expandButton} type="button" className={styles.expand} aria-pressed={expanded} onClick={onExpandToggle}>
+          <span aria-hidden="true">{expanded ? "[↙]" : "[↗]"}</span> {expanded ? "Collapse · Esc" : "Expand"}
+        </button>
       </div>
+    </>
+  );
+}
+
+export interface CameraBlockProps {
+  feed: CameraFeed;
+  blind: boolean;
+  hot: boolean;
+  dimmed: boolean;
+  onExpand: () => void;
+  /** The EXPAND button, for the page to focus after a collapse. */
+  expandButton?: Ref<HTMLButtonElement>;
+  /** False while hidden (the camera is expanded): the block stops drawing; the feed goes on. */
+  active?: boolean;
+}
+
+export function CameraBlock({ feed, blind, hot, dimmed, onExpand, expandButton, active = true }: CameraBlockProps) {
+  return (
+    <section className={styles.block} data-dimmed={dimmed || undefined} aria-label="Camera">
+      <CameraView feed={feed} blind={blind} hot={hot} expanded={false} onExpandToggle={onExpand} expandButton={expandButton} active={active} />
     </section>
   );
 }

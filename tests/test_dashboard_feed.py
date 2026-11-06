@@ -95,8 +95,11 @@ def test_a_started_session_carries_its_raw_times_so_the_page_can_tick():
         "paused_total_s": 0.0,
         "time_up_at": None,
         "blind": None,
+        "episodes": 0,
+        "nudges": 0,
     }
     assert (snap["attention"], snap["episode"]) == ("focused", None)
+    assert (snap["ended"], snap["clear_after_s"]) == (None, 60.0)
 
 
 def test_during_a_distraction_episode_the_snapshot_has_its_kind_start_and_nudges():
@@ -117,6 +120,84 @@ def test_once_focused_again_and_after_the_end_the_snapshot_follows():
     assert (snap["seq"], snap["attention"], snap["episode"]) == (11, "focused", None)
     snap = snapshot_after(12)
     assert (snap["seq"], snap["session"], snap["attention"], snap["episode"]) == (12, None, None, None)
+
+
+# ---------------------------------------------------------------- the last session, once it ended (v2 spec §4)
+
+
+def ended_after(records: list[dict]) -> dict | None:
+    feed = DashboardFeed(CFG)
+    for record in records:
+        feed.on_record(record)
+    return feed.snapshot()["ended"]
+
+
+def test_a_session_the_owner_ended_leaves_its_end_reason_and_counts_in_the_snapshot():
+    ended = ended_after(SESSION)
+    assert (ended["ended_at"], ended["reason"]) == (200.0, "ended_by_owner")
+    assert ended["session"] == {
+        "task": "Email",
+        "started_at": 100.0,
+        "duration_s": 600.0,
+        "paused_since": None,
+        "paused_total_s": 20.0,
+        "time_up_at": None,
+        "blind": None,
+        "episodes": 1,
+        "nudges": 1,
+    }
+
+
+TIME_UP = [
+    rec(100.0, "session.started", task="Email", duration_min=5),
+    rec(120.0, "episode_opened", number=1, kind="phone_use"),
+    rec(125.0, "nudge", wakeup="phone_use.continuing", intensity="subtle", episode=1),
+    rec(140.0, "nudge", wakeup="phone_use.continuing", intensity="firm", episode=1),
+    rec(150.0, "episode_closed", number=1, kind="phone_use", seconds=30.0, included_away=False, nudges=[]),
+    rec(200.0, "episode_opened", number=2, kind="away"),
+    rec(260.0, "nudge", wakeup="away.continuing", intensity="subtle", episode=2),
+    rec(270.0, "episode_closed", number=2, kind="away", seconds=70.0, included_away=True, nudges=["subtle"]),
+    rec(400.0, "session.ended", reason="completed"),
+]
+
+
+def test_a_session_whose_time_ran_out_is_ended_while_it_waits_out_its_extend_grace():
+    feed = DashboardFeed(CFG)
+    for record in TIME_UP:
+        feed.on_record(record)
+    snap = feed.snapshot()
+    assert snap["ended"] == {
+        "session": {**snap["session"], "time_up_at": 400.0},
+        "ended_at": 400.0,
+        "reason": "completed",
+    }
+    assert (snap["ended"]["session"]["episodes"], snap["ended"]["session"]["nudges"]) == (2, 3)
+
+
+def test_a_session_that_ended_while_blind_says_so():
+    ended = ended_after(
+        [
+            rec(100.0, "session.started", task="Email", duration_min=5),
+            rec(150.0, "blind.started", reason="robot_stream_stalled"),
+            rec(400.0, "blind.ended", reason="robot_stream_stalled", seconds=250.0, session_ended=True),
+            rec(400.0, "session.ended", reason="ended_while_blind"),
+        ]
+    )
+    assert (ended["ended_at"], ended["reason"], ended["session"]["blind"]) == (400.0, "ended_while_blind", None)
+    assert (ended["session"]["episodes"], ended["session"]["nudges"]) == (0, 0)
+
+
+def test_extending_in_the_grace_or_starting_a_new_session_means_no_session_has_ended():
+    extended = rec(410.0, "tool_call", name="extend", args={}, result={"extended_by_min": 5, "continued": True})
+    assert ended_after([*TIME_UP, extended]) is None
+    assert ended_after([*SESSION, rec(300.0, "session.started", task="Read", duration_min=10)]) is None
+
+
+def test_the_snapshot_says_how_long_the_page_shows_an_ended_session():
+    import dataclasses
+
+    feed = DashboardFeed(dataclasses.replace(CFG, clear_after_s=5.0))
+    assert feed.snapshot()["clear_after_s"] == 5.0
 
 
 def test_recent_holds_the_last_envelopes_up_to_recent_max():

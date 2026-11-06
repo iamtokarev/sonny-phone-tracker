@@ -28,7 +28,7 @@ from sonny.media import MediaHub
 from sonny.robot import ReachyRobot
 from sonny.session_log import SessionLog
 
-# The built Dashboard (`npm run build` in web/). The base class serves this same folder: <app module dir>/static.
+# The built Dashboard (`bun run build` in web/). The base class serves this same folder: <app module dir>/static.
 STATIC_DIR = Path(__file__).with_name("static")
 
 

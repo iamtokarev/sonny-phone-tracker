@@ -44,21 +44,24 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          bun-version: "1.4.3"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       # check:protocol regenerates the types from the Python models, so it needs the uv env.
       - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.12.5"
           enable-cache: true
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npx vite build
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+      - run: bunx vite build
       - run: uv sync --locked
         working-directory: .
-      - run: npm run check:protocol
+      - run: bun run check:protocol
