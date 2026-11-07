@@ -5,7 +5,7 @@
 - `ReachyMiniApp._get_instance_path()` (`sonny.dashboard.dev`): the base class reads it to find the `static`
   folder; the dev app overrides it to serve Sonny's.
 
-reachy-mini is pinned `==1.11.0` in pyproject.toml. On an upgrade, check both still behave as above, then update
+reachy-mini is pinned `==1.14.0` in pyproject.toml. On an upgrade, check both still behave as above, then update
 the pin here.
 """
 
@@ -18,7 +18,7 @@ from reachy_mini.apps.jsonrpc_server import JsonRpcServer
 
 
 def test_reachy_mini_is_the_version_these_checks_were_written_against():
-    assert version("reachy-mini") == "1.11.0", "re-check the private APIs below, then update this pin"
+    assert version("reachy-mini") == "1.14.0", "re-check the private APIs below, then update this pin"
 
 
 def test_jsonrpc_server_still_serves_one_accepted_socket_with__serve():

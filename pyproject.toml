@@ -10,7 +10,7 @@ dependencies = [
     "parakeet-mlx>=0.5.3",
     "pipecat-ai[openrouter,pocket-tts,silero]>=1.14",
     "python-dotenv>=1.2",
-    "reachy-mini==1.11.0",
+    "reachy-mini==1.14.0",
     "rfdetr>=1.11.2",
 ]
 keywords = ["reachy-mini-app"]
