@@ -1,11 +1,47 @@
-# Sonny
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
+    <img src="docs/media/banner-light.svg" width="880" alt="SONNY: a focus companion for Reachy Mini. It watches the desk, you do the work.">
+  </picture>
+</p>
 
-A focus companion for a Reachy Mini Wireless robot named Sonny. The app runs on a Mac,
-watches its owner during a declared Focus Session through Sonny's camera, and nudges by voice
-when it sees phone use or the owner away from the desk. Vocabulary is in
-[GLOSSARY.md](GLOSSARY.md); decisions are in [docs/adr](docs/adr).
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS%20·%20Apple%20silicon-111111" alt="macOS on Apple silicon">
+  <img src="https://img.shields.io/badge/robot-Reachy%20Mini%20Wireless-111111" alt="Reachy Mini Wireless">
+  <img src="https://img.shields.io/badge/python-3.12-111111" alt="Python 3.12">
+  <a href="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml"><img src="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
-## Setup
+<p align="center"><b>Tell Sonny what you're working on and for how long.<br>It watches the desk through its camera, and when the phone starts winning, it says something.</b></p>
+
+<p align="center"><img src="docs/media/hero-soon.svg" width="880" alt="Sonny on the desk beside its Dashboard: the phone comes up, Sonny turns, plays an emotion and speaks."></p>
+
+## What Sonny does
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/listen-soon.svg" alt="Starting a Focus Session by voice"><br><b>Starts on your word.</b> "Hey Sonny", then plain speech. No app to tap.</td>
+    <td width="50%"><img src="docs/media/watch-soon.svg" alt="Sonny's camera view with person and phone boxes"><br><b>Sees phone use and an empty chair.</b> On your Mac, about 18 ms a frame. Video never leaves it.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/nudge-soon.svg" alt="Sonny nudging with a head move and a line"><br><b>Nudges, then escalates.</b> Subtle first, firmer if it keeps going, with 18 emotion moves.</td>
+    <td><img src="docs/media/excuse-soon.svg" alt="Sonny accepting an Excuse"><br><b>Takes no for an answer.</b> Excuses, check-ins, pause, extend, end. Just say it.</td>
+  </tr>
+</table>
+
+## A session, at a glance
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/session-dark.svg">
+  <img src="docs/media/session-light.svg" width="880" alt="Timeline of a real 94-second test session: three phone pickups, each answered by a Nudge; the third was cut short when the session ended.">
+</picture>
+
+Drawn from a real session log: three phone pickups, Sonny's first two Nudges word for word, and a third that got firmer before the session was ended.
+
+<details>
+<summary><b>Set up and run</b>: <code>mise run bootstrap</code>, <code>mise run app</code>, then say "Hey Sonny"</summary>
+
+<br>
 
 Install [mise](https://mise.jdx.dev/installing-mise.html) if needed, then bootstrap the checkout:
 
@@ -20,8 +56,6 @@ Keep `~/.local/bin` on your shell's `PATH` for future terminals.
 `bootstrap` installs the tools pinned in `mise.toml`, syncs locked Python and Dashboard dependencies,
 builds the Dashboard and installs pre-commit hooks. uv manages Python 3.12 and `.venv`.
 No shell activation is needed for these commands.
-
-## Run
 
 Sonny's daemon and this app's `reachy-mini` SDK must be the same version (1.14.0).
 
@@ -47,41 +81,32 @@ The Dashboard is a page Sonny serves on this Mac while it runs. The run task bui
 the git-ignored `src/sonny/static/`; after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
 Set `open_browser = true` under `[dashboard]` in `src/sonny/sonny.toml` to have it open a tab.
 
+Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
+the whole file and point `SONNY_CONFIG` at the copy.
+
+</details>
+
+<details>
+<summary><b>How Sonny moves</b>: still when idle, level in a session, never lost for long</summary>
+
+<br>
+
 Sonny's head: still at neutral in idle; facing you (daemon face tracking) while you talk to it;
 level and still in a Focus Session, with tracking stopped before the session starts. In a session
 Sonny watches through its camera (not in a Pause) and keeps its body facing you with the head
 centred: one slow turn of both re-centres you when you've stayed off-centre for 3 s. After 10 s
 with nobody in frame it searches once, with the head first and then turning the body, and turns
 to face you once found. Phone Use and Away print an `attention:` line and go to the session log,
-with a detection summary every second. The agent
-colours its lines with `play_emotion` (18 moves, played on the daemon with their sound at volume
-62); a move and a line never overlap and play in the order the agent called them.
+with a detection summary every second. The agent colours its lines with `play_emotion` (18 moves,
+played on the daemon with their sound at volume 62); a move and a line never overlap and play in
+the order the agent called them.
 
-Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
-the whole file and point `SONNY_CONFIG` at the copy.
+</details>
 
-## Develop
+<details>
+<summary><b>Dashboard without the robot</b>: <code>mise run dev</code></summary>
 
-```bash
-mise run check       # pre-commit, Python tests, frontend checks and build
-mise run test -q     # Python tests only; accepts pytest arguments
-mise run build       # Dashboard typecheck and build
-```
-
-List tasks with `mise tasks ls`. For other commands, use `mise exec -- <command>`
-(for example, `mise exec -- bun --cwd web run gen:protocol`).
-
-The agent scenarios (`tests/test_agent_scenarios.py`) replay owner lines and session time through
-the real tools and conductor with a scripted agent. To run them against the configured model
-instead (costs OpenRouter credit), after any change to the prompt or model:
-
-```bash
-SONNY_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
-```
-
-Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
-
-### Dashboard without the robot
+<br>
 
 `sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
 LLM: it replays session logs as the state feed and fills the camera feed. Start it together with
@@ -102,3 +127,46 @@ mise run dev:backend --log logs/session-20261103-*.jsonl --webcam
 Without `--webcam` (or `--clip video.mp4`) the camera shows a drawn placeholder scene whose boxes
 follow the replayed Attention State. `--speed N` plays N times faster and shortens the session's
 Duration to match, so the page's timer runs out with the replay.
+
+</details>
+
+<details>
+<summary><b>Develop</b>: <code>mise run check</code></summary>
+
+<br>
+
+```bash
+mise run check       # pre-commit, Python tests, frontend checks and build
+mise run test -q     # Python tests only; accepts pytest arguments
+mise run build       # Dashboard typecheck and build
+```
+
+List tasks with `mise tasks ls`. For other commands, use `mise exec -- <command>`
+(for example, `mise exec -- bun --cwd web run gen:protocol`).
+
+The agent scenarios (`tests/test_agent_scenarios.py`) replay owner lines and session time through
+the real tools and conductor with a scripted agent. To run them against the configured model
+instead (costs OpenRouter credit), after any change to the prompt or model:
+
+```bash
+SONNY_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
+```
+
+Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
+
+</details>
+
+<details>
+<summary><b>How it's built</b>: words and decisions</summary>
+
+<br>
+
+Vocabulary is in [GLOSSARY.md](GLOSSARY.md); decisions are in [docs/adr](docs/adr), research in
+[docs/research](docs/research). The whole app runs on the Mac and drives Sonny over the LAN
+([ADR 0001](docs/adr/0001-app-runs-on-the-mac.md)); camera frames stay on the Mac
+([ADR 0002](docs/adr/0002-camera-local-audio-may-use-cloud.md)); code judges attention and the
+agent only decides what to say ([ADR 0003](docs/adr/0003-code-observes-agent-decides.md)).
+
+</details>
+
+<p align="center"><sub>Reachy Mini · Pipecat · RF-DETR · Parakeet · Claude Haiku</sub></p>
