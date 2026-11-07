@@ -12,7 +12,7 @@
   <a href="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml"><img src="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-<p align="center"><b>Sonny turns a <a href="https://huggingface.co/reachy-mini">Reachy Mini</a> robot into a focus companion.</b><br>Tell it what you're working on and for how long. It watches the desk through its camera,<br>and when the phone starts winning, it says something.</p>
+<p align="center"><b>A focus companion for the <a href="https://huggingface.co/reachy-mini">Reachy Mini</a> robot.</b><br>Tell it what you're working on and for how long. It watches the desk through its camera,<br>and when the phone starts winning, it says something.</p>
 
 <p align="center"><img src="docs/media/hero.gif" width="880" alt="Sonny's Dashboard over a whole Focus Session, sped up: the timer runs down, the Attention block turns orange at each phone pickup, Sonny's lines appear, and the session ends with its tally."></p>
 
