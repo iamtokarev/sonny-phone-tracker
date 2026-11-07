@@ -180,7 +180,7 @@ class ReachyRepair:
     media session (waiting for the speaker link as at startup), and, after a daemon restart (motors come up
     disabled), `enable_motors()` and the head woken back into its mode's pose.
 
-    The SDK can't reconnect by itself; `_connect_single` is how its constructor connects (reachy-mini 1.11.0)."""
+    The SDK can't reconnect by itself; `_connect_single` is how its constructor connects (reachy-mini 1.14.0)."""
 
     def __init__(self, cfg: Config, mini: Any, hub: _Hub, daemon: Daemon, head: _Head, stop: threading.Event) -> None:
         self._timeout_s = cfg.blind.reconnect_every_s

@@ -23,7 +23,7 @@ No shell activation is needed for these commands.
 
 ## Run
 
-Sonny's daemon and this app's `reachy-mini` SDK must be the same version (1.11.0).
+Sonny's daemon and this app's `reachy-mini` SDK must be the same version (1.14.0).
 
 ```bash
 mise run app

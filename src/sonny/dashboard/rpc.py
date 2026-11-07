@@ -25,7 +25,7 @@ def mount_feed(app: FastAPI, feed: DashboardFeed, path: str = "/rpc") -> JsonRpc
         if not allowed_origin(websocket, feed.cfg):
             await websocket.close(code=1008)
             return
-        # Private: what `JsonRpcServer.mount` runs (reachy-mini ==1.11.0); tests/test_reachy_private_api.py guards it.
+        # Private: what `JsonRpcServer.mount` runs (reachy-mini ==1.14.0); tests/test_reachy_private_api.py guards it.
         await rpc._serve(websocket)
 
     return rpc

@@ -156,5 +156,5 @@ class MediaHub:
 
 def _reopen_media(mini: Any) -> None:
     """A new media session on the same `ReachyMini`. The SDK has no public way to reopen one: this is what its
-    constructor does (reachy-mini 1.11.0)."""
+    constructor does (reachy-mini 1.14.0)."""
     mini.media_manager = mini._configure_mediamanager(mini._media_backend, mini._log_level)
