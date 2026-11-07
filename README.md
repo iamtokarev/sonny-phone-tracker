@@ -7,12 +7,12 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-macOS%20·%20Apple%20silicon-111111" alt="macOS on Apple silicon">
-  <img src="https://img.shields.io/badge/robot-Reachy%20Mini%20Wireless-111111" alt="Reachy Mini Wireless">
+  <a href="https://huggingface.co/reachy-mini"><img src="https://img.shields.io/badge/robot-Reachy%20Mini%20Wireless-111111" alt="Reachy Mini Wireless"></a>
   <img src="https://img.shields.io/badge/python-3.12-111111" alt="Python 3.12">
   <a href="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml"><img src="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-<p align="center"><b>Tell Sonny what you're working on and for how long.<br>It watches the desk through its camera, and when the phone starts winning, it says something.</b></p>
+<p align="center"><b>Sonny turns a <a href="https://huggingface.co/reachy-mini">Reachy Mini</a> robot into a focus companion.</b><br>Tell it what you're working on and for how long. It watches the desk through its camera,<br>and when the phone starts winning, it says something.</p>
 
 <p align="center"><img src="docs/media/hero.gif" width="880" alt="Sonny's Dashboard over a whole Focus Session, sped up: the timer runs down, the Attention block turns orange at each phone pickup, Sonny's lines appear, and the session ends with its tally."></p>
 
@@ -157,18 +157,3 @@ SONNY_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.
 
 </details>
-
-<details>
-<summary><b>How it's built</b>: words and decisions</summary>
-
-<br>
-
-Vocabulary is in [GLOSSARY.md](GLOSSARY.md); decisions are in [docs/adr](docs/adr), research in
-[docs/research](docs/research). The whole app runs on the Mac and drives Sonny over the LAN
-([ADR 0001](docs/adr/0001-app-runs-on-the-mac.md)); camera frames stay on the Mac
-([ADR 0002](docs/adr/0002-camera-local-audio-may-use-cloud.md)); code judges attention and the
-agent only decides what to say ([ADR 0003](docs/adr/0003-code-observes-agent-decides.md)).
-
-</details>
-
-<p align="center"><sub>Reachy Mini · Pipecat · RF-DETR · Parakeet · Claude Haiku</sub></p>
