@@ -14,20 +14,22 @@
 
 <p align="center"><b>Tell Sonny what you're working on and for how long.<br>It watches the desk through its camera, and when the phone starts winning, it says something.</b></p>
 
-<p align="center"><img src="docs/media/hero-soon.svg" width="880" alt="Sonny on the desk beside its Dashboard: the phone comes up, Sonny turns, plays an emotion and speaks."></p>
+<p align="center"><img src="docs/media/hero.gif" width="880" alt="Sonny's Dashboard over a whole Focus Session, sped up: the timer runs down, the Attention block turns orange at each phone pickup, Sonny's lines appear, and the session ends with its tally."></p>
 
 ## What Sonny does
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/media/listen-soon.svg" alt="Starting a Focus Session by voice"><br><b>Starts on your word.</b> "Hey Sonny", then plain speech. No app to tap.</td>
-    <td width="50%"><img src="docs/media/watch-soon.svg" alt="Sonny's camera view with person and phone boxes"><br><b>Sees phone use and an empty chair.</b> On your Mac, about 18 ms a frame. Video never leaves it.</td>
+    <td width="50%"><img src="docs/media/start.gif" alt="The Dashboard as a ten-minute Email session starts and its timer counts down"><br><b>Starts on your word.</b> "Hey Sonny, email for ten minutes." The clock starts. No app to tap.</td>
+    <td width="50%"><img src="docs/media/watch.gif" alt="Sonny's camera view: a phone box appears over the person while they hold their phone"><br><b>Sees phone use and an empty chair.</b> On your Mac, about 18 ms a frame. Video never leaves it.</td>
   </tr>
   <tr>
-    <td><img src="docs/media/nudge-soon.svg" alt="Sonny nudging with a head move and a line"><br><b>Nudges, then escalates.</b> Subtle first, firmer if it keeps going, with 18 emotion moves.</td>
-    <td><img src="docs/media/excuse-soon.svg" alt="Sonny accepting an Excuse"><br><b>Takes no for an answer.</b> Excuses, check-ins, pause, extend, end. Just say it.</td>
+    <td><img src="docs/media/nudge.gif" alt="The Attention block turns orange for Phone Use and Sonny's Nudge line appears"><br><b>Nudges, then escalates.</b> Subtle first, firmer if it keeps going, with 18 emotion moves.</td>
+    <td><img src="docs/media/end.gif" alt="A last phone pickup, then the session ends and the Dashboard shows its tally"><br><b>Stops when you say so.</b> Time left, check-ins, pause, extend, end. Each session ends with its tally and a log.</td>
   </tr>
 </table>
+
+<sub>Every clip is the real Dashboard replaying the session log drawn below (<code>mise run dev:backend --log …</code>); with no robot attached, the camera shows its drawn stand-in for you and your phone.</sub>
 
 ## A session, at a glance
 
