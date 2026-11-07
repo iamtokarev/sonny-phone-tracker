@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
-    <img src="docs/media/banner-light.svg" width="880" alt="SONNY: a focus companion for Reachy Mini. It watches the desk, you do the work.">
+    <img src="docs/media/banner-light.svg" width="880" alt="Focus companion for Reachy Mini: it watches the desk, you do the work.">
   </picture>
 </p>
 
