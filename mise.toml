@@ -31,6 +31,9 @@ description = "Typecheck and build the Dashboard into Sonny's static directory"
 depends = ["web:install"]
 dir = "web"
 run = "bun run build"
+# Skipped while the build is newer than every input, so `mise run app` starts without rebuilding.
+sources = ["src/**/*", "index.html", "package.json", "bun.lock", "tsconfig.json", "vite.config.ts"]
+outputs = ["../src/sonny/static/index.html"]
 
 [tasks.dev]
 description = "Run the robot-free Dashboard backend and Vite; Ctrl-C stops both"
