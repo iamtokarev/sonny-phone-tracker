@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 from sonny.config import Media, Startup
 
@@ -108,7 +109,7 @@ class MediaHub:
             try:
                 self.mini.media.close()
             except Exception as e:
-                print(f"media: closing the old session failed: {type(e).__name__}: {e}", flush=True)
+                logger.warning("closing the old session failed: {}: {}", type(e).__name__, e)
             self._reopen()
             self.start()
         finally:

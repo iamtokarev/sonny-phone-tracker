@@ -85,33 +85,33 @@ class StopAfterReady(threading.Event):
         return super().wait(timeout)
 
 
-def test_ready_only_after_speaker_link_then_clean_quit(app, capsys):
+def test_ready_only_after_speaker_link_then_clean_quit(app, logs):
     mini = FakeMini()
     speaker_up_after(mini.media, 0.1)
     app.run(mini, StopAfterReady())
-    assert capsys.readouterr().out.count("ready") == 1
+    assert logs.text.count("ready") == 1
     assert mini.calls == ["enable_motors", "wake_up", "stop_head_tracking", "goto_sleep"]
     assert mini.media.calls[:2] == ["start_recording", "start_playing"]
     assert not readers_alive()
 
 
-def test_no_ready_when_stopped_before_the_speaker_link(app, capsys):
+def test_no_ready_when_stopped_before_the_speaker_link(app, logs):
     mini = FakeMini()
     stop = threading.Event()
     threading.Timer(0.1, stop.set).start()
     app.run(mini, stop)
-    assert "ready" not in capsys.readouterr().out
+    assert "ready" not in logs.text
     assert mini.calls[-2:] == ["stop_head_tracking", "goto_sleep"]
     assert not readers_alive()
 
 
-def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, capsys):
+def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, logs):
     import dataclasses
 
     cfg = dataclasses.replace(CFG, startup=dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.1))
     mini = FakeMini()
     Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, threading.Event())
-    out = capsys.readouterr().out
+    out = logs.text
     assert "ready" not in out and "speaker" in out
     assert mini.calls[-1] == "goto_sleep"
 
@@ -140,7 +140,7 @@ def test_quit_ends_an_open_session_with_app_quit(app):
     assert (last["type"], last["reason"]) == ("session.ended", "app_quit")
 
 
-def test_readers_stop_even_if_the_robot_fails_at_quit(app, capsys):
+def test_readers_stop_even_if_the_robot_fails_at_quit(app, logs):
     mini = FakeMini()
 
     def broken():
@@ -149,7 +149,7 @@ def test_readers_stop_even_if_the_robot_fails_at_quit(app, capsys):
     mini.goto_sleep = broken
     speaker_up_after(mini.media, 0.05)
     app.run(mini, StopAfterReady())
-    assert "Motor communication error" in capsys.readouterr().out
+    assert "Motor communication error" in logs.text
     assert not readers_alive()
 
 
@@ -157,8 +157,8 @@ def test_main_refuses_without_an_llm_key(monkeypatch, capsys):
     monkeypatch.setattr(main_mod, "load_dotenv", lambda *_: None)
     monkeypatch.delenv(CFG.llm.api_key_env, raising=False)
     monkeypatch.setattr(main_mod, "check_startup", lambda *_: pytest.fail("must not reach the daemon"))
-    assert main_mod.main() == 1
-    assert CFG.llm.api_key_env in capsys.readouterr().out
+    assert main_mod.main([]) == 1
+    assert CFG.llm.api_key_env in capsys.readouterr().err
 
 
 def test_main_refuses_and_exits_before_connecting(monkeypatch, capsys):
@@ -169,9 +169,11 @@ def test_main_refuses_and_exits_before_connecting(monkeypatch, capsys):
 
     monkeypatch.setattr(main_mod, "check_startup", refuse)
     monkeypatch.setattr(main_mod, "Sonny", lambda *a, **k: pytest.fail("app must not start"))
-    assert main_mod.main() == 1
-    assert capsys.readouterr().out.strip() == (
-        "A dashboard app is running on Sonny: stop marionette in Sonny's dashboard first."
+    assert main_mod.main([]) == 1
+    assert (
+        capsys.readouterr()
+        .err.strip()
+        .endswith("ERROR sonny   A dashboard app is running on Sonny: stop marionette in Sonny's dashboard first.")
     )
 
 
@@ -182,12 +184,12 @@ def test_the_link_watch_runs_from_ready_and_stops_before_the_readers(app):
     assert FakeLink.calls == ["start", "join"]  # no reconnect can race the readers stopping
 
 
-def test_without_a_dashboard_build_sonny_still_starts_and_says_so(app, monkeypatch, tmp_path, capsys):
+def test_without_a_dashboard_build_sonny_still_starts_and_says_so(app, monkeypatch, tmp_path, logs):
     monkeypatch.setattr(main_mod, "STATIC_DIR", tmp_path / "static")  # never built
     mini = FakeMini()
     speaker_up_after(mini.media, 0.05)
     app.run(mini, StopAfterReady())
-    out = capsys.readouterr().out
+    out = logs.text
     assert "ready" in out
     assert "Dashboard not built (run bun run build in web/)" in out
     assert "Dashboard: http" not in out
@@ -203,7 +205,7 @@ def built(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("open_browser", [False, True])
 def test_on_ready_sonny_prints_the_dashboard_url_and_opens_a_tab_only_if_asked(
-    built, open_browser, monkeypatch, tmp_path, capsys
+    built, open_browser, monkeypatch, tmp_path, logs
 ):
     import dataclasses
 
@@ -213,7 +215,7 @@ def test_on_ready_sonny_prints_the_dashboard_url_and_opens_a_tab_only_if_asked(
     mini = FakeMini()
     speaker_up_after(mini.media, 0.05)
     Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, StopAfterReady())
-    assert "Dashboard: http://127.0.0.1:8042" in capsys.readouterr().out.splitlines()
+    assert "INFO dash Dashboard: http://127.0.0.1:8042" in logs
     assert opened == (["http://127.0.0.1:8042"] if open_browser else [])
 
 
@@ -350,7 +352,7 @@ def test_the_voice_pipeline_gets_the_camera_feed(tmp_path):
     assert app.camera in seen
 
 
-def test_the_models_load_while_the_speaker_link_comes_up(tmp_path, capsys):
+def test_the_models_load_while_the_speaker_link_comes_up(tmp_path, logs):
     """Loading the voice pipeline (seconds of models) overlaps the robot's startup; "ready" still waits for both."""
     mini = FakeMini()
     loading = threading.Event()
@@ -363,7 +365,7 @@ def test_the_models_load_while_the_speaker_link_comes_up(tmp_path, capsys):
     app = Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
     threading.Thread(target=lambda: loading.wait(5) and setattr(mini.media.audio, "_appsrc", object())).start()
     app.run(mini, StopAfterReady())
-    assert capsys.readouterr().out.count("ready") == 1
+    assert logs.text.count("ready") == 1
 
 
 def test_a_failed_voice_load_still_quits_cleanly(tmp_path):

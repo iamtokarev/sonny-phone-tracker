@@ -35,7 +35,7 @@ class Stub:
         self.args = args
 
 
-def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, capsys, tmp_path):
+def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, logs, tmp_path):
     def broken(*_args):
         raise RuntimeError("no GPU")
 
@@ -44,7 +44,7 @@ def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, capsys, tmp_pa
     (tmp_path / "m.mlpackage").mkdir()
     cfg = dataclasses.replace(CFG.vision, model_path=str(tmp_path / "m.mlpackage"))
     assert isinstance(load_detector(cfg), Stub)
-    assert "using torch MPS fp16" in capsys.readouterr().out
+    assert "using torch MPS fp16" in logs.text
 
 
 def test_an_unknown_backend_is_a_config_error():
@@ -85,7 +85,7 @@ def test_the_coreml_model_is_reloaded_in_the_background_before_the_gpu_slows_dow
     assert model.get() is loads[1]  # 19 s after the reload landed: not due yet
 
 
-def test_a_failed_reload_keeps_the_old_model(capsys):
+def test_a_failed_reload_keeps_the_old_model(logs):
     clock, calls = Clock(), []
 
     def load():
@@ -99,4 +99,4 @@ def test_a_failed_reload_keeps_the_old_model(capsys):
     model.get()
     model.join(5)
     assert model.get() == "first"
-    assert "reload failed" in capsys.readouterr().out
+    assert "reload failed" in logs.text

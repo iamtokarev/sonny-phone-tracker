@@ -76,8 +76,6 @@ class Rig:
             asleep=lambda: self.asleep,
             awake=self.awake,
         )
-        self.said: list[str] = []
-        self.failures.say = self.said.append
 
     def advance(self, seconds: float, step: float = 0.5) -> None:
         """Move time like the conductor's tick: the failures first, then the clock."""
@@ -140,7 +138,6 @@ def test_a_link_down_in_a_session_is_blind_until_it_is_back(rig):
     assert rig.clock.blind and rig.vision.calls == [("blind", True)]
     assert rig.events() == [("blind.started", {"reason": "media_drop"})]
     assert rig.clock.snapshot()["session"]["blind"] is True
-    assert rig.said == ["blind: media drop"]
     rig.advance(9)
     rig.link.down = None
     rig.advance(0.5)

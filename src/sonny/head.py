@@ -40,6 +40,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from loguru import logger
+
 from sonny.config import Config
 
 
@@ -191,7 +193,7 @@ class HeadOwner:
             try:
                 job()
             except Exception as e:
-                print(f"head: {e}", flush=True)
+                logger.warning("{}", e)
 
     # ---------------------------------------------------------------- modes
 

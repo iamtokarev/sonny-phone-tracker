@@ -79,6 +79,11 @@ Session ("Hey Sonny, let's work on my slides for 25 minutes"); in a session you 
 time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctrl-C puts Sonny in
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
+The terminal shows one line per thing Sonny heard, said or did, plus warnings and errors.
+Pipecat's and the robot SDK's debug lines stay out of it: they go to `logs/sonny.log`, which is
+emptied on each start, so only the last run is kept. Run `uv run sonny --verbose` (or set
+`SONNY_VERBOSE=1`) to see them in the terminal as well.
+
 The Dashboard is a page Sonny serves on this Mac while it runs. The run task builds it into
 the git-ignored `src/sonny/static/`; after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
 Set `open_browser = true` under `[dashboard]` in `src/sonny/sonny.toml` to have it open a tab.
@@ -98,7 +103,7 @@ level and still in a Focus Session, with tracking stopped before the session sta
 Sonny watches through its camera (not in a Pause) and keeps its body facing you with the head
 centred: one slow turn of both re-centres you when you've stayed off-centre for 3 s. After 10 s
 with nobody in frame it searches once, with the head first and then turning the body, and turns
-to face you once found. Phone Use and Away print an `attention:` line and go to the session log,
+to face you once found. Phone Use and Away show in the terminal and go to the session log,
 with a detection summary every second. The agent colours its lines with `play_emotion` (18 moves,
 played on the daemon with their sound at volume 62); a move and a line never overlap and play in
 the order the agent called them.

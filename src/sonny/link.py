@@ -28,6 +28,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 import numpy as np
+from loguru import logger
 
 from sonny.config import Config
 from sonny.daemon import DaemonError
@@ -62,7 +63,7 @@ class LinkWatch:
         repair: Repair,
         write: Callable[..., None],
         now: Callable[[], float] = time.time,  # wall time, like the hub's arrival times
-        say: Callable[[str], None] = lambda line: print(line, flush=True),
+        say: Callable[[str], None] = logger.warning,
     ) -> None:
         self._c = cfg.blind
         self._feeds, self._daemon, self._repair, self._write, self._now, self._say = (
@@ -97,7 +98,7 @@ class LinkWatch:
             try:
                 self.check()
             except Exception as e:
-                print(f"link: {type(e).__name__}: {e}", flush=True)
+                logger.warning("check failed: {}: {}", type(e).__name__, e)
 
     def recheck(self) -> None:
         """Ask the daemon at the next check, and allow a reconnect then (after Mac sleep). Thread-safe."""
@@ -118,7 +119,7 @@ class LinkWatch:
             self._relink(now)
             self.down = self._reason(self._now())
         if self.down is None and self._attempts:
-            self._say(f"link: Sonny reconnected after {self._now() - self._out_since:.0f} s")
+            self._say(f"Sonny reconnected after {self._now() - self._out_since:.0f} s")
             self._attempts = 0
 
     def _reason(self, now: float) -> str | None:
@@ -156,7 +157,7 @@ class LinkWatch:
         self._attempted = now
         self._attempts += 1
         if self._attempts == 1:
-            self._say(f"link: Sonny's media link is down; reconnecting every {self._c.reconnect_every_s:g} s")
+            self._say(f"Sonny's media link is down; reconnecting every {self._c.reconnect_every_s:g} s")
         error: str | None = None
         try:
             self._repair.relink()

@@ -86,7 +86,6 @@ class Failures:
         self._awake = awake or NoSleep()
         self._slept = asleep()
         self._spell: tuple[int, str, float] | None = None  # the session, the reason and the start of a spell
-        self.say: Callable[[str], None] = lambda line: print(line, flush=True)
 
     def step(self) -> None:
         slept, self._slept = self._asleep() - self._slept, self._asleep()
@@ -100,7 +99,6 @@ class Failures:
         self._awake.hold(False)
 
     def _woke(self, slept: float) -> None:
-        self.say(f"mac: woke after {slept:.0f} s asleep; checking Sonny's link")
         (self._log.session or self._log.idle).write("mac_woke", slept_s=round(slept, 1))
         self._link.recheck()
         if self._clock.number is None or self._clock.woke():
@@ -121,13 +119,11 @@ class Failures:
             self._clock.set_blind(down)
             self._vision.set_blind(True)
             self._emit(EventType.BLIND_STARTED, reason=down)
-            self.say(f"blind: {down.replace('_', ' ')}")
         elif spell is not None and down is None:
             self._spell = None
             seconds = round(self._clock.end_blind(), 1)
             self._vision.set_blind(False)
             self._emit(EventType.BLIND_ENDED, reason=spell[1], seconds=seconds)
-            self.say(f"blind: ended after {seconds:.0f} s")
             if seconds > self._c.restored_event_after_s:
                 self._emit(EventType.LINK_RESTORED, seconds=seconds)
 

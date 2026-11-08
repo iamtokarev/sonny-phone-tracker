@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 import cv2
 import numpy as np
+from loguru import logger
 
 from sonny.attention import Box, Detections
 from sonny.config import Vision
@@ -49,7 +50,7 @@ def load_detector(cfg: Vision) -> Detector:
         try:
             return CoreMLDetector(_coreml_model(Path(cfg.model_path)), cfg.threshold, cfg.reload_s)
         except Exception as e:
-            print(f"vision: CoreML didn't load ({type(e).__name__}: {e}); using torch MPS fp16", flush=True)
+            logger.warning("CoreML didn't load ({}: {}); using torch MPS fp16", type(e).__name__, e)
     elif cfg.backend != "mps":
         raise ValueError(f"vision.backend must be coreml or mps, not {cfg.backend!r}")
     return MpsDetector(cfg.threshold)
@@ -60,7 +61,7 @@ def _coreml_model(path: Path) -> Path:
         return path
     from rfdetr import RFDETRNano
 
-    print(f"vision: exporting RF-DETR Nano to CoreML at {path} (first run only)...", flush=True)
+    logger.info("exporting RF-DETR Nano to CoreML at {} (first run only)...", path)
     path.parent.mkdir(parents=True, exist_ok=True)
     exported = Path(RFDETRNano(device="cpu").export(output_dir=str(path.parent), format="coreml", verbose=False))
     if exported.resolve() != path.resolve():
@@ -124,7 +125,7 @@ class Refreshed[T]:
         try:
             self._current = self._load()
         except Exception as e:
-            print(f"vision: model reload failed ({type(e).__name__}: {e}); keeping the loaded one", flush=True)
+            logger.warning("model reload failed ({}: {}); keeping the loaded one", type(e).__name__, e)
         self._loaded_at = self._clock()
         self._thread = None
 
