@@ -7,6 +7,7 @@ import math
 from typing import Any, Protocol
 from urllib.parse import quote
 
+from loguru import logger
 from reachy_mini import ReachyMini
 from reachy_mini.utils import create_head_pose
 
@@ -24,7 +25,12 @@ class ReachyRobot:
         self._mini, self._daemon, self._dataset = mini, daemon, emotions_dataset
 
     def wake_up(self) -> None:
-        self._mini.wake_up()
+        """The SDK waits only 1 s past the 2 s move for the daemon's "done". At startup the model loads and imports
+        in other threads can delay that reply past the deadline although the move ran, so a late reply is not fatal."""
+        try:
+            self._mini.wake_up()
+        except TimeoutError:
+            logger.warning("The wake-up move's reply came late; carrying on.")
 
     def sleep(self) -> None:
         self._mini.goto_sleep()
