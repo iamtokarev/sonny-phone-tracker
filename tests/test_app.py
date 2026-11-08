@@ -350,6 +350,34 @@ def test_the_voice_pipeline_gets_the_camera_feed(tmp_path):
     assert app.camera in seen
 
 
+def test_the_models_load_while_the_speaker_link_comes_up(tmp_path, capsys):
+    """Loading the voice pipeline (seconds of models) overlaps the robot's startup; "ready" still waits for both."""
+    mini = FakeMini()
+    loading = threading.Event()
+
+    def voice(*_args):
+        loading.set()
+        assert mini.media.audio._appsrc is None  # the speaker link isn't up yet
+        return FakeVoice()
+
+    app = Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
+    threading.Thread(target=lambda: loading.wait(5) and setattr(mini.media.audio, "_appsrc", object())).start()
+    app.run(mini, StopAfterReady())
+    assert capsys.readouterr().out.count("ready") == 1
+
+
+def test_a_failed_voice_load_still_quits_cleanly(tmp_path):
+    def voice(*_args):
+        raise RuntimeError("no models")
+
+    mini = FakeMini()
+    speaker_up_after(mini.media, 0.05)
+    with pytest.raises(RuntimeError, match="no models"):
+        Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink).run(mini, threading.Event())
+    assert mini.calls[-2:] == ["stop_head_tracking", "goto_sleep"]
+    assert not readers_alive()
+
+
 def test_quitting_with_the_state_feed_open_does_not_hang(dashboard_app):
     from websockets.sync.client import connect
 

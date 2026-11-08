@@ -89,3 +89,18 @@ def test_unreachable_daemon_is_one_line():
     with pytest.raises(StartupError, match="Can't reach Sonny's daemon") as e:
         check_startup(client, SDK)
     assert "\n" not in str(e.value)
+
+
+def test_requests_go_to_the_hosts_ipv4_address():
+    from sonny.daemon import _ipv4_first, ipv4
+
+    assert ipv4("localhost") == "127.0.0.1"
+    assert _ipv4_first("http://localhost:8000/api/daemon/status") == "http://127.0.0.1:8000/api/daemon/status"
+    assert _ipv4_first("http://127.0.0.1:9/x") == "http://127.0.0.1:9/x"
+
+
+def test_a_host_that_does_not_resolve_is_left_for_urllib_to_report():
+    from sonny.daemon import _ipv4_first, ipv4
+
+    assert ipv4("no-such-host.invalid") == "no-such-host.invalid"
+    assert _ipv4_first("http://no-such-host.invalid:8000/x") == "http://no-such-host.invalid:8000/x"

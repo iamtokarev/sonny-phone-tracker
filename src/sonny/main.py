@@ -10,6 +10,7 @@ import sys
 import threading
 import webbrowser
 from collections.abc import Callable, Coroutine
+from concurrent.futures import Future
 from pathlib import Path
 from typing import IO, Any, Protocol
 
@@ -17,7 +18,7 @@ from dotenv import find_dotenv, load_dotenv
 from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
-from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
+from sonny.daemon import DaemonClient, StartupError, check_startup, ipv4, sdk_version
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.serve import announce, dashboard_url, mount_routes
@@ -106,6 +107,10 @@ class Sonny(ReachyMiniApp):
         head = HeadOwner(self.cfg, self._make_robot(self.cfg, reachy_mini), write)
         link_stop = threading.Event()
         link = self._make_link(self.cfg, reachy_mini, hub, head, link_stop, write)
+        # The models load (seconds) while the robot wakes up and the speaker link comes up; "ready" waits for both.
+        voice = _in_background(
+            lambda: self._make_voice(self.cfg, hub, self.log, self.bus, head, link, self.camera), "sonny-voice-load"
+        )
         try:
             reachy_mini.enable_motors()  # motors come up disabled after a daemon restart
             head.start()
@@ -121,8 +126,7 @@ class Sonny(ReachyMiniApp):
             self._health = self.feed.run_health(
                 link_stop, lambda: Readings(link.down, hub.frames, hub.latest_frame()[1] or None)
             )
-            voice = self._make_voice(self.cfg, hub, self.log, self.bus, head, link, self.camera)
-            asyncio.run(voice.run(stop_event, self._ready))
+            asyncio.run(voice.result().run(stop_event, self._ready))
         finally:
             self._quit(head, hub, link, link_stop)
 
@@ -142,6 +146,37 @@ class Sonny(ReachyMiniApp):
         _step("stop tracking and go to sleep", head.quit)
         _step("stop media readers", hub.stop)
         _step("close log", self.log.close)
+
+
+def _in_background[T](fn: Callable[[], T], name: str) -> Future[T]:
+    """`fn()` on a daemon thread, so a quit during startup needn't wait for it."""
+    future: Future[T] = Future()
+
+    def work() -> None:
+        try:
+            future.set_result(fn())
+        except BaseException as e:
+            future.set_exception(e)
+
+    threading.Thread(target=work, name=name, daemon=True).start()
+    return future
+
+
+def prewarm(cfg: Config) -> None:
+    """Import the voice pipeline's libraries (Pipecat, torch, CoreML: seconds) while `main()` checks the daemon and
+    connects. An import that fails here fails again where it is used, and says so there."""
+
+    def imports() -> None:
+        try:
+            import sonny.voice.pipeline  # noqa: F401
+
+            if cfg.vision.backend == "coreml":
+                import coremltools  # noqa: F401
+                from rfdetr.export._runtime import decode  # noqa: F401
+        except Exception:
+            pass
+
+    threading.Thread(target=imports, name="sonny-prewarm", daemon=True).start()
 
 
 def _step(name: str, fn: Callable[[], object]) -> None:
@@ -174,6 +209,7 @@ def main() -> int:
         pid = (Path(cfg.log.dir) / "sonny.lock").read_text().strip()
         print(f"Sonny is already running (pid {pid}); quit it first (Ctrl-C in its terminal).")
         return 1
+    prewarm(cfg)
     load_dotenv(find_dotenv(usecwd=True))  # the repo-root .env holds the LLM key
     if not os.environ.get(cfg.llm.api_key_env):
         print(f"{cfg.llm.api_key_env} is not set; put it in the repo-root .env.")
@@ -187,7 +223,7 @@ def main() -> int:
         return 1
     app = Sonny(cfg)
     try:
-        app.wrapped_run(host=cfg.robot.host, port=cfg.robot.port)
+        app.wrapped_run(host=ipv4(cfg.robot.host), port=cfg.robot.port)  # see `ipv4`: saves ~1 s per connect
     except KeyboardInterrupt:
         app.stop()
     finally:

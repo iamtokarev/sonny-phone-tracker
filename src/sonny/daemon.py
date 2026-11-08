@@ -5,7 +5,9 @@ The startup checks run before `ReachyMini` opens, so a refusal never starts a me
 """
 
 import json
+import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 from importlib.metadata import version
 from typing import Any
@@ -31,7 +33,8 @@ class DaemonClient:
         """GET `path`, or POST `body` as JSON; the JSON reply. Raises DaemonError."""
         url = self.base_url + path
         data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(url, data=data, method=method or ("GET" if data is None else "POST"))
+        method = method or ("GET" if data is None else "POST")
+        req = urllib.request.Request(_ipv4_first(url), data=data, method=method)
         if data is not None:
             req.add_header("Content-Type", "application/json")
         try:
@@ -52,6 +55,23 @@ class DaemonClient:
 
     def current_app(self) -> dict[str, Any] | None:
         return self._get("/api/apps/current-app-status")
+
+
+def ipv4(host: str) -> str:
+    """`host`'s IPv4 address, or `host` itself if it has none (or doesn't resolve: the caller reports that). macOS
+    lists `reachy-mini.local`'s IPv6 address first, the daemon listens on IPv4 only, and a connect there is refused
+    after ~1 s: on every HTTP request, and on the SDK's connect."""
+    try:
+        return socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    except OSError:
+        return host
+
+
+def _ipv4_first(url: str) -> str:
+    parts = urllib.parse.urlsplit(url)
+    if not parts.hostname or (ip := ipv4(parts.hostname)) == parts.hostname:
+        return url
+    return parts._replace(netloc=ip if parts.port is None else f"{ip}:{parts.port}").geturl()
 
 
 def sdk_version() -> str:
