@@ -149,3 +149,11 @@ def test_the_pose_reads_back_the_head_yaw_in_the_world_and_the_body_yaw(daemon):
     robot = ReachyRobot(Posed(), daemon[2], DATASET)
     head, body = robot.pose()
     assert head == pytest.approx(70.0) and body == pytest.approx(40.0)
+
+
+def test_a_late_wake_up_reply_is_not_fatal(daemon):
+    class Late(SdkMini):
+        def wake_up(self):
+            raise TimeoutError("Task did not complete in time.")
+
+    ReachyRobot(Late(), daemon[2], DATASET).wake_up()
