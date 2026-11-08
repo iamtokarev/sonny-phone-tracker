@@ -66,3 +66,16 @@ run = ["bun run lint", "bun run test", "bun run check:protocol", "bun run build"
 [tasks.check]
 description = "Run all local checks (live LLM tests remain opt-in)"
 run = [{ task = "lint" }, { tasks = ["test", "web:check"] }]
+
+[tasks."space:stage"]
+description = "Assemble the static Hugging Face showcase Space (space/ + docs/media/) in build/space/"
+run = [
+  "rm -rf build/space && mkdir -p build/space/media",
+  "cp space/index.html space/README.md build/space/",
+  "cp docs/media/*.svg docs/media/*.gif build/space/media/",
+]
+
+[tasks."space:serve"]
+description = "Stage the showcase Space and serve it at http://127.0.0.1:8070"
+depends = ["space:stage"]
+run = "python3 -m http.server 8070 --bind 127.0.0.1 --directory build/space"
