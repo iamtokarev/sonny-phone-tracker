@@ -3,6 +3,7 @@
 Run with `uv run sonny` from a terminal that has macOS Local Network permission.
 """
 
+import argparse
 import asyncio
 import fcntl
 import os
@@ -11,10 +12,12 @@ import threading
 import webbrowser
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
+from importlib import metadata
 from pathlib import Path
 from typing import IO, Any, Protocol
 
 from dotenv import find_dotenv, load_dotenv
+from loguru import logger
 from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
@@ -22,9 +25,11 @@ from sonny.daemon import DaemonClient, StartupError, check_startup, ipv4, sdk_ve
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.serve import announce, dashboard_url, mount_routes
+from sonny.detector import IMPORTS
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
 from sonny.link import LinkWatch, ReachyRepair
+from sonny.logs import log_to_file, narrate, setup
 from sonny.media import MediaHub
 from sonny.robot import ReachyRobot
 from sonny.session_log import SessionLog
@@ -93,7 +98,7 @@ class Sonny(ReachyMiniApp):
         self._make_voice, self._make_robot, self._make_link = voice, robot, link
         # The Dashboard's state feed (spec §4): every log record and bus event, served on /rpc.
         self.feed = DashboardFeed(cfg.dashboard, self.bus)
-        self.log.on_record = self.feed.on_record
+        self.log.on_record = self._on_record
         if self.settings_app is not None:
             mount_routes(self.settings_app, self.feed, self.camera)
         self._health: threading.Thread | None = None
@@ -117,9 +122,9 @@ class Sonny(ReachyMiniApp):
             hub.start()
             if not hub.wait_speaker_ready(stop_event):
                 if not stop_event.is_set():
-                    print(
-                        f"Sonny's speaker link didn't come up within {self.cfg.startup.speaker_wait_timeout_s:g} s; "
-                        "restart the app."
+                    logger.error(
+                        "Sonny's speaker link didn't come up within {:g} s; restart the app.",
+                        self.cfg.startup.speaker_wait_timeout_s,
                     )
                 return
             link.start(link_stop)  # spec §9: Blind and reconnects
@@ -130,8 +135,12 @@ class Sonny(ReachyMiniApp):
         finally:
             self._quit(head, hub, link, link_stop)
 
+    def _on_record(self, record: dict[str, Any]) -> None:
+        self.feed.on_record(record)
+        narrate(record)
+
     def _ready(self) -> None:
-        print("ready", flush=True)
+        logger.info("ready")
         if announce(STATIC_DIR, self.custom_app_url) and self.cfg.dashboard.open_browser:
             webbrowser.open(self.custom_app_url)
 
@@ -164,7 +173,9 @@ def _in_background[T](fn: Callable[[], T], name: str) -> Future[T]:
 
 def prewarm(cfg: Config) -> None:
     """Import the voice pipeline's libraries (Pipecat, torch, CoreML: seconds) while `main()` checks the daemon and
-    connects. An import that fails here fails again where it is used, and says so there."""
+    connects. An import that fails here fails again where it is used, and says so there. Holds the detector's import
+    lock until done (taken here, so no detector load can slip in before the thread starts)."""
+    IMPORTS.acquire()
 
     def imports() -> None:
         try:
@@ -175,6 +186,8 @@ def prewarm(cfg: Config) -> None:
                 from rfdetr.export._runtime import decode  # noqa: F401
         except Exception:
             pass
+        finally:
+            IMPORTS.release()
 
     threading.Thread(target=imports, name="sonny-prewarm", daemon=True).start()
 
@@ -183,7 +196,14 @@ def _step(name: str, fn: Callable[[], object]) -> None:
     try:
         fn()
     except Exception as e:
-        print(f"quit: {name} failed: {e}", flush=True)
+        logger.warning("quit: {} failed: {}", name, e)
+
+
+def _version(package: str) -> str:
+    try:
+        return metadata.version(package)
+    except metadata.PackageNotFoundError:
+        return "?"
 
 
 def claim_instance(log_dir: Path | str) -> IO[str] | None:
@@ -203,23 +223,31 @@ def claim_instance(log_dir: Path | str) -> IO[str] | None:
     return f
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="sonny", description="Run Sonny, the focus companion, on this Mac.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="show Pipecat's and the robot SDK's debug lines")
+    args = parser.parse_args(argv)
     cfg = load_config()
+    setup(None, verbose=args.verbose or os.environ.get("SONNY_VERBOSE") == "1")
     if (lock := claim_instance(cfg.log.dir)) is None:
         pid = (Path(cfg.log.dir) / "sonny.lock").read_text().strip()
-        print(f"Sonny is already running (pid {pid}); quit it first (Ctrl-C in its terminal).")
+        logger.error("Sonny is already running (pid {}); quit it first (Ctrl-C in its terminal).", pid)
         return 1
+    log_to_file(cfg.log.dir)
+    logger.info(
+        "Sonny {} · Pipecat {} · reachy-mini {}", *(_version(p) for p in ("sonny", "pipecat-ai", "reachy-mini"))
+    )
     prewarm(cfg)
     load_dotenv(find_dotenv(usecwd=True))  # the repo-root .env holds the LLM key
     if not os.environ.get(cfg.llm.api_key_env):
-        print(f"{cfg.llm.api_key_env} is not set; put it in the repo-root .env.")
+        logger.error("{} is not set; put it in the repo-root .env.", cfg.llm.api_key_env)
         return 1
     try:
         check_startup(
             DaemonClient(f"http://{cfg.robot.host}:{cfg.robot.port}", cfg.robot.http_timeout_s), sdk_version()
         )
     except StartupError as e:
-        print(e)
+        logger.error("{}", e)
         return 1
     app = Sonny(cfg)
     try:

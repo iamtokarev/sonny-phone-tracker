@@ -3,6 +3,7 @@ in the Sonny check; ticket 07 measured them."""
 
 import dataclasses
 import threading
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -35,7 +36,7 @@ class Stub:
         self.args = args
 
 
-def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, capsys, tmp_path):
+def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, logs, tmp_path):
     def broken(*_args):
         raise RuntimeError("no GPU")
 
@@ -44,7 +45,36 @@ def test_coreml_that_will_not_load_falls_back_to_mps(monkeypatch, capsys, tmp_pa
     (tmp_path / "m.mlpackage").mkdir()
     cfg = dataclasses.replace(CFG.vision, model_path=str(tmp_path / "m.mlpackage"))
     assert isinstance(load_detector(cfg), Stub)
-    assert "using torch MPS fp16" in capsys.readouterr().out
+    assert "using torch MPS fp16" in logs.text
+
+
+def test_a_detector_loads_only_after_the_prewarm_imports(monkeypatch):
+    """Importing rfdetr's model while prewarm imports transformers fails: its lazy imports aren't thread-safe."""
+    monkeypatch.setattr(detector, "MpsDetector", Stub)
+    loaded: list[object] = []
+    with detector.IMPORTS:  # what `sonny.main.prewarm` holds while it imports
+        t = threading.Thread(
+            target=lambda: loaded.append(load_detector(dataclasses.replace(CFG.vision, backend="mps")))
+        )
+        t.start()
+        t.join(0.2)
+        assert loaded == []
+    t.join(5)
+    assert isinstance(loaded[0], Stub)
+
+
+def test_prewarm_holds_the_import_lock_until_its_imports_finish(monkeypatch):
+    from types import SimpleNamespace
+
+    import sonny.main as main
+
+    started: list[Callable[[], None]] = []
+    fake = SimpleNamespace(Thread=lambda target, **_kw: SimpleNamespace(start=lambda: started.append(target)))
+    monkeypatch.setattr(main, "threading", fake)
+    main.prewarm(dataclasses.replace(CFG, vision=dataclasses.replace(CFG.vision, backend="mps")))
+    assert detector.IMPORTS.locked()  # taken before the thread starts: no detector load slips in first
+    started[0]()  # the thread's imports
+    assert not detector.IMPORTS.locked()
 
 
 def test_an_unknown_backend_is_a_config_error():
@@ -85,7 +115,7 @@ def test_the_coreml_model_is_reloaded_in_the_background_before_the_gpu_slows_dow
     assert model.get() is loads[1]  # 19 s after the reload landed: not due yet
 
 
-def test_a_failed_reload_keeps_the_old_model(capsys):
+def test_a_failed_reload_keeps_the_old_model(logs):
     clock, calls = Clock(), []
 
     def load():
@@ -99,4 +129,4 @@ def test_a_failed_reload_keeps_the_old_model(capsys):
     model.get()
     model.join(5)
     assert model.get() == "first"
-    assert "reload failed" in capsys.readouterr().out
+    assert "reload failed" in logs.text

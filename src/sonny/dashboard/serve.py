@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI
+from loguru import logger
 
 from sonny.config import Dashboard
 from sonny.dashboard.camera import CameraFeed
@@ -19,9 +20,9 @@ def dashboard_url(cfg: Dashboard) -> str:
 def announce(static_dir: Path, url: str) -> bool:
     """Print the Dashboard's URL, or how to build it when `static_dir` has no page yet; whether it is built."""
     if not (static_dir / "index.html").exists():
-        print("Dashboard not built (run bun run build in web/)", flush=True)
+        logger.warning("Dashboard not built (run bun run build in web/)")
         return False
-    print(f"Dashboard: {url}", flush=True)
+    logger.info("Dashboard: {}", url)
     return True
 
 

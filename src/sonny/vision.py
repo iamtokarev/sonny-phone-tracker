@@ -24,6 +24,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 import numpy as np
+from loguru import logger
 
 from sonny.attention import AttentionRules, AttentionState, Detections, Episode
 from sonny.config import Config
@@ -115,9 +116,9 @@ class VisionWorker:
         try:
             self.detector = load_detector(self.cfg.vision)
         except Exception as e:
-            print(f"vision: RF-DETR didn't load ({type(e).__name__}: {e}); Sonny can't watch", flush=True)
+            logger.error("RF-DETR didn't load ({}: {}); Sonny can't watch", type(e).__name__, e)
             return False
-        print(f"vision: RF-DETR Nano on {self.detector.name}", flush=True)
+        logger.info("RF-DETR Nano on {}", self.detector.name)
         return True
 
     def start(self, stop: threading.Event) -> None:
@@ -137,7 +138,7 @@ class VisionWorker:
                 if not self.step():
                     stop.wait(self.cfg.media.reader_idle_sleep_s)
             except Exception as e:
-                print(f"vision: {type(e).__name__}: {e}", flush=True)
+                logger.warning("{}: {}", type(e).__name__, e)
                 stop.wait(1)
 
     def step(self) -> bool:
@@ -251,8 +252,6 @@ class VisionWorker:
         for event in events:
             self._bus.publish(event)
             (self._log.session or self._log.idle).write_event(event)
-            excused = " (excused)" if event.data.get("excused") else ""
-            print(f"attention: {str(event.type).replace('.', ' ')}{excused}", flush=True)
         if rules.state != state:
             self._write("attention", state=rules.state, was=state)
 

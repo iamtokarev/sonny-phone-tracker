@@ -15,12 +15,12 @@ def test_the_dashboard_url_is_on_127_0_0_1_at_the_configured_port():
     assert dashboard_url(CFG) == f"http://127.0.0.1:{CFG.port}"
 
 
-def test_announce_prints_the_url_when_built_and_how_to_build_otherwise(tmp_path, capsys):
+def test_announce_logs_the_url_when_built_and_how_to_build_otherwise(tmp_path, logs):
     assert announce(tmp_path, "http://127.0.0.1:8042") is False
-    assert capsys.readouterr().out == "Dashboard not built (run bun run build in web/)\n"
+    assert logs == ["WARNING dash Dashboard not built (run bun run build in web/)"]
     (tmp_path / "index.html").write_text("<!doctype html>")
     assert announce(tmp_path, "http://127.0.0.1:8042") is True
-    assert capsys.readouterr().out == "Dashboard: http://127.0.0.1:8042\n"
+    assert logs[-1] == "INFO dash Dashboard: http://127.0.0.1:8042"
 
 
 def test_mount_routes_serves_the_feed_and_the_camera():

@@ -28,6 +28,7 @@ from typing import Any
 import cv2
 import numpy as np
 from fastapi import FastAPI
+from loguru import logger
 from reachy_mini import ReachyMiniApp
 
 import sonny.main
@@ -37,6 +38,7 @@ from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.origin import HOST
 from sonny.dashboard.serve import announce, dashboard_url, mount_routes
+from sonny.logs import setup
 
 Record = dict[str, Any]
 
@@ -192,7 +194,7 @@ class CameraLoop:
         from sonny.detector import load_detector
 
         detector = load_detector(self.cfg.vision)
-        print(f"dev: RF-DETR Nano on {detector.name}", flush=True)
+        logger.info("RF-DETR Nano on {}", detector.name)
         pace = 1 / (cap.get(cv2.CAP_PROP_FPS) or 30) if self._clip else 0.0  # the webcam paces itself
         try:
             while not stop.is_set():
@@ -261,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn
 
+    setup(None)
     cfg = load_config()
     app, feed, camera = build_app(cfg)
     stop = threading.Event()
@@ -269,7 +272,9 @@ def main(argv: list[str] | None = None) -> int:
         # On the main thread: macOS asks for camera access only from there.
         capture = cv2.VideoCapture(0 if args.webcam else str(args.clip))
         if not capture.isOpened():
-            print(f"Can't open {'the webcam (allow camera access for this terminal)' if args.webcam else args.clip}")
+            logger.error(
+                "Can't open {}", "the webcam (allow camera access for this terminal)" if args.webcam else args.clip
+            )
             return 1
     loop = CameraLoop(cfg, feed, camera, capture, always_watch=not args.log, loop_clip=args.clip is not None)
     threading.Thread(target=loop.run, args=(stop,), name="sonny-dev-camera", daemon=True).start()
@@ -279,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     feed.run_health(stop, lambda: Readings(None, loop.frames, loop.frame_t or None))
 
     announce(sonny.main.STATIC_DIR, dashboard_url(cfg.dashboard))
-    print(f"With bun run dev in web/: http://{HOST}:{cfg.dashboard.dev_port}/static/", flush=True)
+    logger.info("With bun run dev in web/: http://{}:{}/static/", HOST, cfg.dashboard.dev_port)
     try:
         uvicorn.run(app, host=HOST, port=cfg.dashboard.port, log_level="warning")
     finally:
