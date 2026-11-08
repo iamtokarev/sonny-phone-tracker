@@ -24,6 +24,12 @@ from sonny.config import Vision
 
 PERSON, PHONE = 1, 77  # COCO-91 ids, as RF-DETR returns them
 
+# Held while another thread imports the libraries a detector needs (`sonny.main.prewarm`). transformers resolves its
+# classes lazily and not thread-safely: importing `rfdetr.RFDETRNano` while another thread is mid-way through importing
+# torch, transformers or Pipecat fails with "cannot import name 'AutoBackbone'", which sent the first-run CoreML export
+# to the MPS fallback every time.
+IMPORTS = threading.Lock()
+
 
 class Detector(Protocol):
     name: str
@@ -46,6 +52,11 @@ def best_boxes(xyxy: np.ndarray, conf: np.ndarray, class_id: np.ndarray, frame_w
 
 def load_detector(cfg: Vision) -> Detector:
     """The configured backend; CoreML falls back to MPS with one terminal line."""
+    with IMPORTS:
+        return _load(cfg)
+
+
+def _load(cfg: Vision) -> Detector:
     if cfg.backend == "coreml":
         try:
             return CoreMLDetector(_coreml_model(Path(cfg.model_path)), cfg.threshold, cfg.reload_s)

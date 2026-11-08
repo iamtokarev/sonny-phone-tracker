@@ -25,6 +25,7 @@ from sonny.daemon import DaemonClient, StartupError, check_startup, ipv4, sdk_ve
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.serve import announce, dashboard_url, mount_routes
+from sonny.detector import IMPORTS
 from sonny.events import EndReason, EventBus
 from sonny.head import HeadOwner, Robot
 from sonny.link import LinkWatch, ReachyRepair
@@ -172,7 +173,9 @@ def _in_background[T](fn: Callable[[], T], name: str) -> Future[T]:
 
 def prewarm(cfg: Config) -> None:
     """Import the voice pipeline's libraries (Pipecat, torch, CoreML: seconds) while `main()` checks the daemon and
-    connects. An import that fails here fails again where it is used, and says so there."""
+    connects. An import that fails here fails again where it is used, and says so there. Holds the detector's import
+    lock until done (taken here, so no detector load can slip in before the thread starts)."""
+    IMPORTS.acquire()
 
     def imports() -> None:
         try:
@@ -183,6 +186,8 @@ def prewarm(cfg: Config) -> None:
                 from rfdetr.export._runtime import decode  # noqa: F401
         except Exception:
             pass
+        finally:
+            IMPORTS.release()
 
     threading.Thread(target=imports, name="sonny-prewarm", daemon=True).start()
 
