@@ -18,7 +18,7 @@ from dotenv import find_dotenv, load_dotenv
 from reachy_mini import ReachyMini, ReachyMiniApp
 
 from sonny.config import Config, load_config
-from sonny.daemon import DaemonClient, StartupError, check_startup, sdk_version
+from sonny.daemon import DaemonClient, StartupError, check_startup, ipv4, sdk_version
 from sonny.dashboard.camera import CameraFeed
 from sonny.dashboard.feed import DashboardFeed, Readings
 from sonny.dashboard.serve import announce, dashboard_url, mount_routes
@@ -223,7 +223,7 @@ def main() -> int:
         return 1
     app = Sonny(cfg)
     try:
-        app.wrapped_run(host=cfg.robot.host, port=cfg.robot.port)
+        app.wrapped_run(host=ipv4(cfg.robot.host), port=cfg.robot.port)  # see `ipv4`: saves ~1 s per connect
     except KeyboardInterrupt:
         app.stop()
     finally:
