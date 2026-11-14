@@ -1,16 +1,16 @@
-"""One Sonny at a time: a second `uv run sonny` refuses to start while one runs (two processes share the robot,
+"""A second app instance refuses to start while one holds the lock (two processes share the robot,
 and an old one keeps running old code)."""
 
 import os
 
-from sonny.main import claim_instance
+from sonny_focus_companion.main import claim_instance
 
 
 def test_a_second_instance_is_refused_and_told_which_process_runs(tmp_path):
     first = claim_instance(tmp_path)
     assert first is not None
     assert claim_instance(tmp_path) is None
-    assert (tmp_path / "sonny.lock").read_text().strip() == str(os.getpid())
+    assert (tmp_path / "sonny-focus-companion.lock").read_text().strip() == str(os.getpid())
     first.close()
 
 

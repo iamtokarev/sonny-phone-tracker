@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from sonny.dashboard.feed import DashboardFeed, Readings
-from sonny.dashboard.protocol import Envelope, Snapshot, envelope_types, schema_hash
-from sonny.events import EventType
+from sonny_focus_companion.dashboard.feed import DashboardFeed, Readings
+from sonny_focus_companion.dashboard.protocol import Envelope, Snapshot, envelope_types, schema_hash
+from sonny_focus_companion.events import EventType
 from tests.test_dashboard_feed import CFG, SESSION, read, recorded_logs
 
 GENERATED = Path(__file__).parents[1] / "web" / "src" / "protocol.gen.ts"
@@ -54,15 +54,17 @@ def test_every_record_in_a_recorded_session_log_fits_the_protocol(path):
 def test_the_wire_names_are_the_enums_values_so_they_cannot_drift():
     from typing import get_args
 
-    from sonny.attention import AttentionState
-    from sonny.dashboard.protocol import AttentionStateName, EndReasonName
-    from sonny.events import EndReason
+    from sonny_focus_companion.attention import AttentionState
+    from sonny_focus_companion.dashboard.protocol import AttentionStateName, EndReasonName
+    from sonny_focus_companion.events import EndReason
 
     assert get_args(AttentionStateName) == tuple(s.value for s in AttentionState)
     assert get_args(EndReasonName) == tuple(r.value for r in EndReason)
 
 
 def test_no_wire_type_shadows_the_attention_rules_detections():
-    import sonny.dashboard.protocol as protocol
+    import sonny_focus_companion.dashboard.protocol as protocol
 
-    assert not hasattr(protocol, "Detections"), "sonny.attention.Detections is the detector's; name the envelope apart"
+    assert not hasattr(protocol, "Detections"), (
+        "sonny_focus_companion.attention.Detections is the detector's; name the envelope apart"
+    )

@@ -1,5 +1,5 @@
 // The Dashboard's picture of Sonny: a snapshot, then each envelope applied to it, following the same rules
-// as Sonny's DashboardFeed (src/sonny/dashboard/feed.py, `_apply`), so the page agrees with the next snapshot.
+// as Sonny's DashboardFeed (src/sonny_focus_companion/dashboard/feed.py, `_apply`), so the page agrees with the next snapshot.
 import type { Envelope, Snapshot } from "../protocol.gen";
 
 /** `recent_max` is the snapshot's: `recent` keeps as many envelopes as Sonny's does. */

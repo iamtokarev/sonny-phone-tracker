@@ -51,7 +51,7 @@ export function MainView({ state, nowS, detailsToggle, expanded = false, onExpan
   return (
     <div className={styles.main} data-scene={s}>
       <header className={styles.header}>
-        <span className={styles.brand}>SONNY</span>
+        <span className={styles.brand}>Sonny Focus Companion</span>
         <span className={styles.headerRight}>
           <span className={styles.status} data-problem={status.problem || undefined} data-blink={status.blink || undefined} role="status">
             <span className={styles.dot} aria-hidden="true" />

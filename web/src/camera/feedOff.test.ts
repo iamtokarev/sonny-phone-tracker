@@ -19,6 +19,16 @@ describe("the page's PAUSE FEED choice", () => {
     expect(feedOffChoice(storage).read()).toBe(false);
   });
 
+  it("migrates the saved pause and gives the current choice precedence", () => {
+    const storage = memory();
+    storage.setItem("sonny.camera.feedOff", "1");
+    expect(feedOffChoice(storage).read()).toBe(true);
+    expect(storage.getItem("sonny-focus-companion.camera.feedOff")).toBe("1");
+
+    feedOffChoice(storage).save(false);
+    expect(feedOffChoice(storage).read()).toBe(false);
+  });
+
   it("still works when the browser refuses storage", () => {
     const refusing = {
       getItem: () => {

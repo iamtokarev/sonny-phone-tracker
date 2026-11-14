@@ -1,7 +1,7 @@
 // The one owner of the /rpc socket (spec §4, client side).
 //
-// Sonny pushes every envelope to each open socket as a `sonny.event` notification, so the page is
-// subscribed from the moment the socket opens. It buffers those, asks for `sonny.snapshot`, applies it, then
+// Sonny pushes every envelope to each open socket as a `sonny-focus-companion.event` notification, so the page is
+// subscribed from the moment the socket opens. It buffers those, asks for `sonny-focus-companion.snapshot`, applies it, then
 // replays the buffered envelopes with `seq > snapshot.seq`. Live envelopes must come in `seq` order: an old
 // or repeated one is dropped, a gap means one was lost, so the page snapshots again. When the socket closes
 // it reconnects (reconnecting.ts: 0.5 s doubling up to 5 s, starting over once a snapshot lands) and starts
@@ -84,7 +84,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
 
   const requestSnapshot = (socket: FeedSocket | null) => {
     pendingId = nextId++;
-    socket?.send(JSON.stringify({ jsonrpc: "2.0", id: pendingId, method: "sonny.snapshot", params: {} }));
+    socket?.send(JSON.stringify({ jsonrpc: "2.0", id: pendingId, method: "sonny-focus-companion.snapshot", params: {} }));
     if (state.connection !== "syncing") set({ ...state, connection: "syncing" });
   };
 
@@ -120,7 +120,7 @@ export function connectFeed(url: string, options: FeedOptions = {}): Feed {
     } catch {
       return;
     }
-    if (message.method === "sonny.event") {
+    if (message.method === "sonny-focus-companion.event") {
       const envelope = message.params as Envelope;
       if (state.connection === "live") follow(state, [envelope]);
       else buffer.push(envelope);

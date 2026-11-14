@@ -16,11 +16,11 @@ from pipecat.frames.frames import (
 from pipecat.observers.base_observer import FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 
-from sonny.config import load_config
-from sonny.dashboard.feed import DashboardFeed
-from sonny.dashboard.protocol import Envelope
-from sonny.session_log import SessionLog
-from sonny.voice.phase import AgentPhases
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.feed import DashboardFeed
+from sonny_focus_companion.dashboard.protocol import Envelope
+from sonny_focus_companion.session_log import SessionLog
+from sonny_focus_companion.voice.phase import AgentPhases
 
 
 def phases() -> tuple[AgentPhases, list[str]]:

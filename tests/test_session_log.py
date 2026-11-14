@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from sonny.events import EndReason, Event, EventType
-from sonny.session_log import SessionLog
+from sonny_focus_companion.events import EndReason, Event, EventType
+from sonny_focus_companion.session_log import SessionLog
 
 
 def records(path):

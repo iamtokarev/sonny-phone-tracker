@@ -6,11 +6,11 @@ import json
 import numpy as np
 import pytest
 
-from sonny.attention import Box, Detections
-from sonny.config import load_config
-from sonny.events import EndReason, EventBus
-from sonny.session_log import SessionLog
-from sonny.vision import VisionWorker
+from sonny_focus_companion.attention import Box, Detections
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EndReason, EventBus
+from sonny_focus_companion.session_log import SessionLog
+from sonny_focus_companion.vision import VisionWorker
 
 CFG = load_config()
 W = 1280
@@ -142,7 +142,7 @@ def rig(tmp_path):
 def test_the_detector_loads_before_ready_and_says_on_what(tmp_path, monkeypatch, logs):
     rig = Rig(tmp_path)
     rig.worker.detector = None
-    monkeypatch.setattr("sonny.vision.load_detector", lambda cfg: rig.detector)
+    monkeypatch.setattr("sonny_focus_companion.vision.load_detector", lambda cfg: rig.detector)
     assert rig.worker.load() is True
     assert rig.worker.detector is rig.detector
     assert "INFO vision RF-DETR Nano on fake" in logs
@@ -156,7 +156,7 @@ def test_a_detector_that_will_not_load_leaves_sonny_blind_but_running(tmp_path, 
     def broken(cfg):
         raise RuntimeError("no model")
 
-    monkeypatch.setattr("sonny.vision.load_detector", broken)
+    monkeypatch.setattr("sonny_focus_companion.vision.load_detector", broken)
     assert rig.worker.load() is False
     assert "Sonny can't watch" in logs.text
     rig.log.close()
@@ -390,7 +390,7 @@ def test_a_detection_summary_is_logged_once_a_second(rig):
 
 
 class Camera:
-    """The Dashboard's camera feed (`sonny.dashboard.camera.CameraFeed`): remembers what it was offered."""
+    """The Dashboard camera feed remembers the last frame offered."""
 
     def __init__(self) -> None:
         self.offers: list[tuple] = []

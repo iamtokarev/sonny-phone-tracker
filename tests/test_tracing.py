@@ -22,16 +22,16 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 from pipecat.tests.utils import SleepFrame, run_test
 
-from sonny.config import load_config
-from sonny.events import EventBus
-from sonny.focus.clock import FocusClock
-from sonny.focus.conductor import Conductor, wakeup_message
-from sonny.focus.tools import SessionTools
-from sonny.session_log import SessionLog
-from sonny.tracing import TRACE_KEY, AgentTracing, wakeup_context
-from sonny.voice.activity import ActivityTap, AgentActivity
-from sonny.voice.llm import CappedOpenRouterLLM, LlmCall
-from sonny.voice.pipeline import Conversation, LineTracker
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EventBus
+from sonny_focus_companion.focus.clock import FocusClock
+from sonny_focus_companion.focus.conductor import Conductor, wakeup_message
+from sonny_focus_companion.focus.tools import SessionTools
+from sonny_focus_companion.session_log import SessionLog
+from sonny_focus_companion.tracing import TRACE_KEY, AgentTracing, wakeup_context
+from sonny_focus_companion.voice.activity import ActivityTap, AgentActivity
+from sonny_focus_companion.voice.llm import CappedOpenRouterLLM, LlmCall
+from sonny_focus_companion.voice.pipeline import Conversation, LineTracker
 from tests.fakes import StubHead
 
 CFG = load_config()
@@ -92,7 +92,7 @@ class Rig:
 
 def roots(tracing):
     assert tracing.flush()
-    return [r for r in tracing.client.runs if r["name"] == "sonny.wakeup"]
+    return [r for r in tracing.client.runs if r["name"] == "sonny-focus-companion.wakeup"]
 
 
 def test_session_start_switch_extension_and_terminal_wakeup_share_the_right_threads(tmp_path, tracing):
@@ -145,7 +145,7 @@ def test_session_start_switch_extension_and_terminal_wakeup_share_the_right_thre
 
 
 def test_idle_reset_new_process_and_payload_copy(tmp_path, tracing):
-    from sonny.voice.turns import WakeSeen
+    from sonny_focus_companion.voice.turns import WakeSeen
 
     rig = Rig(tmp_path, tracing)
     first = rig.owner("hello")

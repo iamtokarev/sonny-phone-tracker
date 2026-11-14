@@ -11,9 +11,9 @@ import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
-from sonny.attention import AttentionState, Box, Detections
-from sonny.config import load_config
-from sonny.dashboard.camera import CameraFeed, encode_jpeg
+from sonny_focus_companion.attention import AttentionState, Box, Detections
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.camera import CameraFeed, encode_jpeg
 
 CFG = load_config()
 

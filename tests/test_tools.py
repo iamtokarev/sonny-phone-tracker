@@ -2,11 +2,11 @@
 
 import pytest
 
-from sonny.config import load_config
-from sonny.events import EventBus
-from sonny.focus.clock import FocusClock
-from sonny.focus.tools import SessionTools
-from sonny.session_log import SessionLog
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EventBus
+from sonny_focus_companion.focus.clock import FocusClock
+from sonny_focus_companion.focus.tools import SessionTools
+from sonny_focus_companion.session_log import SessionLog
 from tests.fakes import StubHead
 
 CFG = load_config()

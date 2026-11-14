@@ -23,14 +23,14 @@ class FakeSocket implements FeedSocket {
     this.onopen?.();
   }
   snapshotRequests() {
-    return this.sent.filter((m) => m.method === "sonny.snapshot");
+    return this.sent.filter((m) => m.method === "sonny-focus-companion.snapshot");
   }
   answerSnapshot(result: Snapshot) {
     const request = this.snapshotRequests().at(-1)!;
     this.onmessage?.({ data: JSON.stringify({ jsonrpc: "2.0", id: request.id, result }) });
   }
   event(envelope: Envelope) {
-    this.onmessage?.({ data: JSON.stringify({ jsonrpc: "2.0", method: "sonny.event", params: envelope }) });
+    this.onmessage?.({ data: JSON.stringify({ jsonrpc: "2.0", method: "sonny-focus-companion.event", params: envelope }) });
   }
   drop() {
     this.onclose?.();

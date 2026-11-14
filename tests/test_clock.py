@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from sonny.config import load_config
-from sonny.events import EndReason, EventBus, EventType
-from sonny.focus.clock import FocusClock, Refused
-from sonny.session_log import SessionLog
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EndReason, EventBus, EventType
+from sonny_focus_companion.focus.clock import FocusClock, Refused
+from sonny_focus_companion.session_log import SessionLog
 
 CFG = load_config()
 MIN = 60.0

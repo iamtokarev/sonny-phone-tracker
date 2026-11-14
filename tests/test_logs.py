@@ -4,13 +4,13 @@ import warnings
 
 from loguru import logger
 
-from sonny.logs import area, narrate, setup
+from sonny_focus_companion.logs import area, narrate, setup
 
 
 def test_areas_come_from_the_logger_name():
-    assert area("sonny.voice.pipeline") == "voice"
-    assert area("sonny.detector") == "vision"
-    assert area("sonny.main") == "sonny"
+    assert area("sonny_focus_companion.voice.pipeline") == "voice"
+    assert area("sonny_focus_companion.detector") == "vision"
+    assert area("sonny_focus_companion.main") == "sonny"
     assert area("pipecat.turns.user_stop") == "pipecat"
     assert area("reachy_mini.media.webrtc_client_gstreamer") == "reachy"
 
@@ -24,7 +24,7 @@ def test_the_console_tells_the_story_and_hides_library_chatter(capsys, tmp_path)
     logging.getLogger("reachy_mini.media").error("Camera lost")
     logging.getLogger("reachy_mini.media.audio_control_utils").error("No Reachy Mini Audio USB device found!")
     logging.getLogger("httpx").info("HTTP Request: POST https://openrouter.ai/api/v1/chat/completions")
-    logger.patch(lambda r: r.update(name="sonny.vision")).info("RF-DETR Nano on CoreML")
+    logger.patch(lambda r: r.update(name="sonny_focus_companion.vision")).info("RF-DETR Nano on CoreML")
     warnings.warn("`torch.jit.script` is deprecated", FutureWarning, stacklevel=1)
     logger.complete()
 
@@ -35,7 +35,7 @@ def test_the_console_tells_the_story_and_hides_library_chatter(capsys, tmp_path)
         "ERROR reachy  Camera lost",
         "INFO  vision  RF-DETR Nano on CoreML",
     ]
-    file = (tmp_path / "sonny.log").read_text()
+    file = (tmp_path / "sonny-focus-companion.log").read_text()
     assert "VADUserStartedSpeakingFrame" in file and "Cleared player queue" in file and "torch.jit" in file
     assert "USB device" in file and "HTTP Request" in file
 
@@ -47,10 +47,10 @@ def test_verbose_shows_everything(capsys):
 
 
 def test_each_run_starts_a_fresh_file(tmp_path):
-    (tmp_path / "sonny.log").write_text("the last run\n")
+    (tmp_path / "sonny-focus-companion.log").write_text("the last run\n")
     setup(tmp_path)
     logger.info("this run")
-    assert "the last run" not in (tmp_path / "sonny.log").read_text()
+    assert "the last run" not in (tmp_path / "sonny-focus-companion.log").read_text()
 
 
 def test_session_records_are_narrated(logs):

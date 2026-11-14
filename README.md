@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
-    <img src="docs/media/banner-light.svg" width="880" alt="Focus companion for Reachy Mini: it watches the desk, you do the work.">
+    <img src="docs/media/banner-light.svg" width="880" alt="Sonny Focus Companion for Reachy Mini">
   </picture>
 </p>
 
@@ -9,10 +9,10 @@
   <img src="https://img.shields.io/badge/platform-macOS%20·%20Apple%20silicon-111111" alt="macOS on Apple silicon">
   <a href="https://huggingface.co/reachy-mini"><img src="https://img.shields.io/badge/robot-Reachy%20Mini%20Wireless-111111" alt="Reachy Mini Wireless"></a>
   <img src="https://img.shields.io/badge/python-3.12-111111" alt="Python 3.12">
-  <a href="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml"><img src="https://github.com/iamtokarev/sonny-phone-tracker/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/iamtokarev/sonny-focus-companion/actions/workflows/ci.yml"><img src="https://github.com/iamtokarev/sonny-focus-companion/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-<p align="center"><b>A focus companion for the <a href="https://huggingface.co/reachy-mini">Reachy Mini</a> robot.</b><br>Tell it what you're working on and for how long. It watches the desk through its camera,<br>and when the phone starts winning, it says something.</p>
+<p align="center"><b>Sonny Focus Companion for the <a href="https://huggingface.co/reachy-mini">Reachy Mini</a> robot.</b><br>Tell it what you're working on and for how long. It watches the desk through its camera,<br>and when the phone starts winning, it says something.</p>
 
 <p align="center"><img src="docs/media/hero.gif" width="880" alt="Sonny's Dashboard over a whole Focus Session, sped up: the timer runs down, the Attention block turns orange at each phone pickup, Sonny's lines appear, and the session ends with its tally."></p>
 
@@ -20,7 +20,7 @@
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/media/start.gif" alt="The Dashboard as a ten-minute Email session starts and its timer counts down"><br><b>Starts on your word.</b> "Hey Sonny, email for ten minutes." The clock starts. No app to tap.</td>
+    <td width="50%"><img src="docs/media/start.gif" alt="The Dashboard as an Email session starts and its timer counts down"><br><b>Starts on your word.</b> "Hey Sonny, email for ten minutes." The clock starts. No app to tap.</td>
     <td width="50%"><img src="docs/media/watch.gif" alt="Sonny's camera view: a phone box appears over the person while they hold their phone"><br><b>Sees phone use and an empty chair.</b> On your Mac, about 18 ms a frame. Video never leaves it.</td>
   </tr>
   <tr>
@@ -67,6 +67,16 @@ mise run app
 
 `mise run start` is an alias for the same command.
 
+### Upgrading from Sonny Phone Tracker
+
+Run `mise run bootstrap` from the updated checkout and reload any open Dashboard tabs. If you use
+the Python package or commands directly, switch to `sonny_focus_companion` for imports and
+`sonny-focus-companion` or `sonny-focus-companion-dashboard-dev` for commands. Change any
+app-specific `SONNY_*` variables you set to the `SONNY_FOCUS_COMPANION_*` prefix, including
+`CONFIG`, `VERBOSE`, `LIVE`, `LIVE_RUNS` and `CLIP_DETECTIONS`. Existing TOML overrides, session
+logs and saved Dashboard preferences still work. Dashboard RPC clients should use
+`sonny-focus-companion.snapshot` and `sonny-focus-companion.event`.
+
 The LLM runs on OpenRouter: put `OPENROUTER_API_KEY=...` in a `.env` at the repo root (it is
 git-ignored). The first start downloads the voice models from Hugging Face, and exports RF-DETR
 Nano to CoreML in `models/` (about 20 s, before `ready`; it prints `vision: RF-DETR Nano on
@@ -80,16 +90,16 @@ time left, extend, pause, resume, end, take an Excuse or ask for a Check-in. Ctr
 its sleep pose. Each session's log is a JSON Lines file in `logs/`.
 
 The terminal shows one line per thing Sonny heard, said or did, plus warnings and errors.
-Pipecat's and the robot SDK's debug lines stay out of it: they go to `logs/sonny.log`, which is
-emptied on each start, so only the last run is kept. Run `uv run sonny --verbose` (or set
-`SONNY_VERBOSE=1`) to see them in the terminal as well.
+Pipecat's and the robot SDK's debug lines stay out of it: they go to `logs/sonny-focus-companion.log`, which is
+emptied on each start, so only the last run is kept. Run `uv run sonny-focus-companion --verbose` (or set
+`SONNY_FOCUS_COMPANION_VERBOSE=1`) to see them in the terminal as well.
 
 The Dashboard is a page Sonny serves on this Mac while it runs. The run task builds it into
-the git-ignored `src/sonny/static/`; after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
-Set `open_browser = true` under `[dashboard]` in `src/sonny/sonny.toml` to have it open a tab.
+the git-ignored `src/sonny_focus_companion/static/`; after `ready` Sonny prints `Dashboard: http://127.0.0.1:8042`.
+Set `open_browser = true` under `[dashboard]` in `src/sonny_focus_companion/sonny-focus-companion.toml` to have it open a tab.
 
-Every tunable number lives in [src/sonny/sonny.toml](src/sonny/sonny.toml). To override, copy
-the whole file and point `SONNY_CONFIG` at the copy.
+Every tunable number lives in [src/sonny_focus_companion/sonny-focus-companion.toml](src/sonny_focus_companion/sonny-focus-companion.toml). To override, copy
+the whole file and point `SONNY_FOCUS_COMPANION_CONFIG` at the copy.
 
 </details>
 
@@ -115,7 +125,7 @@ the order the agent called them.
 
 <br>
 
-`sonny-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
+`sonny-focus-companion-dashboard-dev` serves the Dashboard's routes on Sonny's port (8042) with no robot, voice or
 LLM: it replays session logs as the state feed and fills the camera feed. Start it together with
 Vite at http://127.0.0.1:5173/static/ (which proxies `/rpc` and `/ws` to it):
 
@@ -156,7 +166,7 @@ the real tools and conductor with a scripted agent. To run them against the conf
 instead (costs OpenRouter credit), after any change to the prompt or model:
 
 ```bash
-SONNY_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
+SONNY_FOCUS_COMPANION_LIVE=1 mise run test -m live -s tests/test_agent_scenarios.py
 ```
 
 Ruff lints and formats through pre-commit; CI runs the same hooks plus the tests on macOS.

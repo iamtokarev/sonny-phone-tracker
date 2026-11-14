@@ -3,7 +3,7 @@ import logging
 import pytest
 from loguru import logger
 
-from sonny.logs import restore_stdlib
+from sonny_focus_companion.logs import restore_stdlib
 
 
 class Logged(list[str]):
@@ -17,7 +17,7 @@ class Logged(list[str]):
 @pytest.fixture
 def logs():
     lines = Logged()
-    from sonny.logs import area
+    from sonny_focus_companion.logs import area
 
     sink = logger.add(
         lambda m: lines.append(
@@ -32,7 +32,7 @@ def logs():
 
 @pytest.fixture(autouse=True)
 def _restore_logging():
-    """`sonny.logs.setup` (run by `main()`) swaps loguru's sinks and the stdlib root handlers; undo it after a test."""
+    """Restore loguru sinks and stdlib root handlers after running app setup."""
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level
     yield

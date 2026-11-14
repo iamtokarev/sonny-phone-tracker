@@ -4,14 +4,14 @@ import json
 
 import pytest
 
-from sonny.config import load_config
-from sonny.events import EndReason, Event, EventBus, EventType
-from sonny.focus.conductor import Conductor, wakeup_message, wakeup_payload
-from sonny.session_log import SessionLog
-from sonny.voice.activity import AgentActivity
-from sonny.voice.llm import LlmCall
-from sonny.voice.pipeline import Conducting, Conversation, SpokenLine
-from sonny.voice.turns import WakeSeen
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EndReason, Event, EventBus, EventType
+from sonny_focus_companion.focus.conductor import Conductor, wakeup_message, wakeup_payload
+from sonny_focus_companion.session_log import SessionLog
+from sonny_focus_companion.voice.activity import AgentActivity
+from sonny_focus_companion.voice.llm import LlmCall
+from sonny_focus_companion.voice.pipeline import Conducting, Conversation, SpokenLine
+from sonny_focus_companion.voice.turns import WakeSeen
 
 CFG = load_config()
 NEW = WakeSeen(0.97, ignored=False, barge_in=False, new_conversation=True)

@@ -3,9 +3,9 @@ daemon failure, and the reconnect every `blind.reconnect_every_s`, with a fake m
 
 import pytest
 
-from sonny.config import load_config
-from sonny.daemon import DaemonError
-from sonny.link import LinkWatch
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.daemon import DaemonError
+from sonny_focus_companion.link import LinkWatch
 
 CFG = load_config()
 FREEZE = CFG.blind.freeze_s
@@ -251,7 +251,7 @@ class Head:
 def repair(mini, hub, motors="enabled"):
     import threading
 
-    from sonny.link import ReachyRepair
+    from sonny_focus_companion.link import ReachyRepair
 
     head = Head()
     return ReachyRepair(CFG, mini, hub, Motors(motors), head, threading.Event()), head

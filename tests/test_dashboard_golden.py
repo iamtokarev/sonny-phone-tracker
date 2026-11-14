@@ -18,9 +18,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sonny.config import load_config
-from sonny.dashboard.feed import DashboardFeed
-from sonny.dashboard.protocol import Envelope, Snapshot
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.feed import DashboardFeed
+from sonny_focus_companion.dashboard.protocol import Envelope, Snapshot
 
 FIXTURE = Path(__file__).with_name("fixtures") / "dashboard_golden.json"
 CHECKPOINTS = (1, 4, 5, 7, 8, 10, 11, 12, 13, 15, 17, 18, 19, 20, 21, 22, 23, 26, 27)

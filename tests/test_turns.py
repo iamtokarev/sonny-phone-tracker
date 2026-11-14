@@ -20,8 +20,8 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.tests.utils import run_test
 from pipecat.turns.types import ProcessFrameResult
 
-from sonny.config import load_config
-from sonny.voice.turns import (
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.voice.turns import (
     OwnerTurns,
     WakeHeardFrame,
     WakeSeen,

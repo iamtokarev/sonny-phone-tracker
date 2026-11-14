@@ -1,8 +1,9 @@
 // Whether the Details drawer is open: closed by default, remembered in localStorage when the browser allows.
 // One store for the page, so the toggle in the header and the drawer below the main view agree.
 import { useSyncExternalStore } from "react";
+import { readMigratedPreference } from "../savedPreference";
 
-const KEY = "sonny.details.open";
+const KEY = "sonny-focus-companion.details.open";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
@@ -15,7 +16,7 @@ export interface DetailsToggleStore {
 export function detailsToggle(storage: Storage | null): DetailsToggleStore {
   let open = false;
   try {
-    open = storage?.getItem(KEY) === "1";
+    open = readMigratedPreference(storage, KEY, "sonny.details.open") === "1";
   } catch {
     // private window or blocked site data: start closed
   }

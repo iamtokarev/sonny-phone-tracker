@@ -16,17 +16,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
-from sonny.config import Config
-from sonny.events import EndReason, Event, EventBus, EventType
-from sonny.focus.clock import FocusClock
-from sonny.focus.conductor import Conductor, wakeup_payload
-from sonny.focus.failures import Failures
-from sonny.focus.nudges import AWAY_WAKES, NUDGE_WAKES, SPOKEN
-from sonny.focus.tools import SessionTools
-from sonny.session_log import SessionLog
-from sonny.voice.activity import AgentActivity
-from sonny.voice.pipeline import Conducting, Conversation, SpokenLine
-from sonny.voice.prompt import agent_prompt
+from sonny_focus_companion.config import Config
+from sonny_focus_companion.events import EndReason, Event, EventBus, EventType
+from sonny_focus_companion.focus.clock import FocusClock
+from sonny_focus_companion.focus.conductor import Conductor, wakeup_payload
+from sonny_focus_companion.focus.failures import Failures
+from sonny_focus_companion.focus.nudges import AWAY_WAKES, NUDGE_WAKES, SPOKEN
+from sonny_focus_companion.focus.tools import SessionTools
+from sonny_focus_companion.session_log import SessionLog
+from sonny_focus_companion.voice.activity import AgentActivity
+from sonny_focus_companion.voice.pipeline import Conducting, Conversation, SpokenLine
+from sonny_focus_companion.voice.prompt import agent_prompt
 from tests.fakes import StubHead
 
 MAX_STEPS_PER_WAKEUP = 6  # LLM calls; a wake-up that needs more never ends on its own

@@ -1,6 +1,6 @@
 import threading
 
-from sonny.events import EndReason, Event, EventBus, EventType
+from sonny_focus_companion.events import EndReason, Event, EventBus, EventType
 
 
 def drain(q):

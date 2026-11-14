@@ -189,7 +189,7 @@ class StubHead:
         self.calls.append("enter_session")
 
     def request(self, name: str) -> dict:
-        from sonny.head import MOVES
+        from sonny_focus_companion.head import MOVES
 
         self.calls.append(name)
         return {"playing": name, "intensity": MOVES[name].intensity}

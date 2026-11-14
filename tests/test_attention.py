@@ -4,9 +4,9 @@ from dataclasses import replace
 
 import pytest
 
-from sonny.attention import AttentionRules, AttentionState, Box, Detections
-from sonny.config import load_config
-from sonny.events import Event, EventType
+from sonny_focus_companion.attention import AttentionRules, AttentionState, Box, Detections
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import Event, EventType
 
 CFG = load_config()
 FPS = CFG.window.expected_fps
