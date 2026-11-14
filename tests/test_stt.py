@@ -22,9 +22,9 @@ from pipecat.pipeline.worker import PipelineParams
 from pipecat.services.settings import STTSettings
 from pipecat.tests.utils import SleepFrame, run_test
 
-from sonny.config import load_config
-from sonny.voice.models import TurnGatedSTT
-from sonny.voice.turns import WakeHeardFrame
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.voice.models import TurnGatedSTT
+from sonny_focus_companion.voice.turns import WakeHeardFrame
 
 CFG = load_config()
 RATE = CFG.media.audio_sample_rate

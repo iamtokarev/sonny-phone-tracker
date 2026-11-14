@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from sonny.daemon import DaemonClient, StartupError, check_startup
+from sonny_focus_companion.daemon import DaemonClient, StartupError, check_startup
 
 SDK = "1.11.0"
 
@@ -92,7 +92,7 @@ def test_unreachable_daemon_is_one_line():
 
 
 def test_requests_go_to_the_hosts_ipv4_address():
-    from sonny.daemon import _ipv4_first, ipv4
+    from sonny_focus_companion.daemon import _ipv4_first, ipv4
 
     assert ipv4("localhost") == "127.0.0.1"
     assert _ipv4_first("http://localhost:8000/api/daemon/status") == "http://127.0.0.1:8000/api/daemon/status"
@@ -100,7 +100,7 @@ def test_requests_go_to_the_hosts_ipv4_address():
 
 
 def test_a_host_that_does_not_resolve_is_left_for_urllib_to_report():
-    from sonny.daemon import _ipv4_first, ipv4
+    from sonny_focus_companion.daemon import _ipv4_first, ipv4
 
     assert ipv4("no-such-host.invalid") == "no-such-host.invalid"
     assert _ipv4_first("http://no-such-host.invalid:8000/x") == "http://no-such-host.invalid:8000/x"

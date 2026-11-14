@@ -8,10 +8,10 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 
-import sonny.detector as detector
-from sonny.attention import Box
-from sonny.config import load_config
-from sonny.detector import PERSON, PHONE, best_boxes, load_detector
+import sonny_focus_companion.detector as detector
+from sonny_focus_companion.attention import Box
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.detector import PERSON, PHONE, best_boxes, load_detector
 
 CFG = load_config()
 
@@ -52,7 +52,7 @@ def test_a_detector_loads_only_after_the_prewarm_imports(monkeypatch):
     """Importing rfdetr's model while prewarm imports transformers fails: its lazy imports aren't thread-safe."""
     monkeypatch.setattr(detector, "MpsDetector", Stub)
     loaded: list[object] = []
-    with detector.IMPORTS:  # what `sonny.main.prewarm` holds while it imports
+    with detector.IMPORTS:  # what `sonny_focus_companion.main.prewarm` holds while it imports
         t = threading.Thread(
             target=lambda: loaded.append(load_detector(dataclasses.replace(CFG.vision, backend="mps")))
         )
@@ -66,7 +66,7 @@ def test_a_detector_loads_only_after_the_prewarm_imports(monkeypatch):
 def test_prewarm_holds_the_import_lock_until_its_imports_finish(monkeypatch):
     from types import SimpleNamespace
 
-    import sonny.main as main
+    import sonny_focus_companion.main as main
 
     started: list[Callable[[], None]] = []
     fake = SimpleNamespace(Thread=lambda target, **_kw: SimpleNamespace(start=lambda: started.append(target)))

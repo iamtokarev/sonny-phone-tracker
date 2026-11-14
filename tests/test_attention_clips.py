@@ -2,7 +2,7 @@
 
 Opt-in: the per-frame detections are the owner's camera data and stay out of the repo, in the gitignored `.scratch/`.
 They come from `.scratch/sonny-v1/assets/27-attention/extract_detections.py`, so no detector runs here. Point
-SONNY_CLIP_DETECTIONS at the file, or keep it at its default path; the tests skip when it is missing.
+SONNY_FOCUS_COMPANION_CLIP_DETECTIONS at the file, or keep it at its default path; the tests skip when it is missing.
 """
 
 import itertools
@@ -14,12 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from sonny.attention import AttentionRules, Box, Detections
-from sonny.config import load_config
-from sonny.events import EventType
+from sonny_focus_companion.attention import AttentionRules, Box, Detections
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.events import EventType
 
 DEFAULT_PATH = Path(__file__).parents[1] / ".scratch/sonny-v1/assets/27-attention/out/clip_detections.json"
-PATH = Path(os.environ.get("SONNY_CLIP_DETECTIONS") or DEFAULT_PATH)
+PATH = Path(os.environ.get("SONNY_FOCUS_COMPANION_CLIP_DETECTIONS") or DEFAULT_PATH)
 IN_USE = ["phone_in_hand_chest", "phone_in_hand_low", "phone_texting_two_hands", "phone_to_ear"]
 NOT_IN_USE = ["phone_on_desk", "hands_near_face", "leaning_back", "working_no_phone", "empty_chair"]
 

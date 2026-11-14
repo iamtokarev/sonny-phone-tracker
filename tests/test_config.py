@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from sonny.config import DEFAULT_CONFIG_PATH, ConfigError, load_config
+from sonny_focus_companion.config import DEFAULT_CONFIG_PATH, ConfigError, load_config
 
 
 def write_config(tmp_path: Path, edit) -> Path:
     data = DEFAULT_CONFIG_PATH.read_text()
-    path = tmp_path / "sonny.toml"
+    path = tmp_path / "sonny-focus-companion.toml"
     path.write_text(edit(data))
     return path
 
@@ -48,7 +48,7 @@ def test_int_is_accepted_for_float_fields():
 
 def test_override_file_via_env(tmp_path, monkeypatch):
     path = write_config(tmp_path, lambda s: s.replace("volume = 62", "volume = 40"))
-    monkeypatch.setenv("SONNY_CONFIG", str(path))
+    monkeypatch.setenv("SONNY_FOCUS_COMPANION_CONFIG", str(path))
     assert load_config().robot.volume == 40
 
 

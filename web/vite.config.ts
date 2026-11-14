@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react()],
   base: "/static/",
   build: {
-    outDir: "../src/sonny/static",
+    outDir: "../src/sonny_focus_companion/static",
     emptyOutDir: true,
   },
   server: {

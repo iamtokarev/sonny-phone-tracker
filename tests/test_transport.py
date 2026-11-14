@@ -6,9 +6,9 @@ import time
 import numpy as np
 from pipecat.frames.frames import InterruptionFrame, OutputAudioRawFrame
 
-from sonny.config import load_config
-from sonny.media import MediaHub
-from sonny.voice.transport import ReachyOutput
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.media import MediaHub
+from sonny_focus_companion.voice.transport import ReachyOutput
 from tests.fakes import FakeMini
 
 CFG = load_config()

@@ -12,7 +12,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
 )
 
-from sonny.voice.activity import AgentActivity
+from sonny_focus_companion.voice.activity import AgentActivity
 
 STUCK_S = 120
 

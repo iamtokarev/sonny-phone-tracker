@@ -6,9 +6,10 @@
 import { useSyncExternalStore } from "react";
 import { formatClock, remainingS } from "../clock/timer";
 import type { EndedView } from "../protocol.gen";
+import { readMigratedPreference } from "../savedPreference";
 import type { FeedView } from "../stream/state";
 
-const KEY = "sonny.cleared.started_at";
+const KEY = "sonny-focus-companion.cleared.started_at";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 type Ending = Pick<FeedView, "ended" | "clear_after_s">;
@@ -55,7 +56,7 @@ export interface ClearedSessions {
 export function clearedSessions(storage: Storage | null): ClearedSessions {
   let cleared: number | null = null;
   try {
-    const raw = storage?.getItem(KEY);
+    const raw = readMigratedPreference(storage, KEY, "sonny.cleared.started_at");
     cleared = raw == null || raw === "" || !Number.isFinite(Number(raw)) ? null : Number(raw);
   } catch {
     // private window or blocked site data: nothing cleared yet

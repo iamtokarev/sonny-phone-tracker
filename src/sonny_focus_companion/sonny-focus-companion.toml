@@ -1,0 +1,168 @@
+# Sonny's config: every number the app uses lives here, never in code (spec §12).
+# Point SONNY_FOCUS_COMPANION_CONFIG at a copy of this file to override it; the copy must keep every key.
+
+[robot]
+host = "reachy-mini.local"
+port = 8000
+http_timeout_s = 3
+volume = 62
+
+[startup]
+speaker_wait_timeout_s = 60
+speaker_poll_s = 0.2
+
+[media]
+audio_sample_rate = 16000
+audio_queue_max = 500
+reader_idle_sleep_s = 0.005
+reader_join_timeout_s = 2
+
+[log]
+dir = "logs"
+
+[llm]
+model = "anthropic/claude-haiku-5.5"
+api_key_env = "OPENROUTER_API_KEY"  # read from the environment or the repo-root .env
+temperature = 0.6
+sdk_max_retries = 2
+retry_timeout_s = 3
+wakeup_cap_s = 15
+
+[stt]
+model = "mlx-community/parakeet-tdt-0.6b-v2"  # Parakeet TDT 0.6B v2 on MLX, English only
+language = "en"
+ttfs_p99_s = 1.0  # speech end to final transcript, as the turn-stop strategy assumes; ticket 16 ran with this
+
+[tts]
+voice = "alba"
+queue_ahead_s = 0.12
+
+[wake]
+model_repo = "iamtokarev/hey-sonny-wake-word"
+model_revision = "ad4597d3fe83a0a1b36f2c1ee612378e0a36e246"  # pinned Hub commit
+model_file = "hey_sonny.onnx"
+threshold = 0.9
+window_s = 6
+frame_s = 0.08  # openWakeWord scores 80 ms frames
+refractory_s = 2  # one wake per utterance of the phrase
+keep_before_s = 1.2  # audio kept before a wake (the phrase itself); speech before that is never transcribed
+
+[voice]
+stop_poll_s = 0.1
+input_poll_s = 0.1
+
+[vad]
+end_of_turn_s = 0.6
+
+[phone]
+min_conf = 0.5
+min_inside_person = 0.30
+parked_motion = 0.005  # share of frame width
+parked_window_s = 10
+
+[person]
+min_conf = 0.4  # a `person` box at least this sure is presence; ticket 07 measured person rates at 0.4
+
+[phone_use]
+start_share = 0.60
+start_window_s = 8
+end_share = 0.20
+end_window_s = 5
+
+[window]
+min_frame_share = 0.5
+expected_fps = 30  # frames per second the vision worker delivers with daemon tracking off (ticket 15)
+
+[away]
+start_s = 60
+end_presence_s = 3
+max_nudges_per_episode = 2
+
+[vision]
+backend = "coreml"  # native CoreML on GPU (~18 ms/frame, ticket 07); "mps" is torch MPS fp16 (~26 ms), the fallback
+model_path = "models/rfdetr-nano_fp32.mlpackage"  # exported from RF-DETR Nano on first run; relative to where the app runs
+threshold = 0.3  # boxes below this are dropped; the attention rules apply their own, higher thresholds
+reload_s = 20  # CoreML reloads the model this often: ~30 s after a load the GPU path slows from ~15 to ~39 ms/frame
+settle_s = 0.6  # frames this long after a head move ends still show it (~277 ms command-to-visible lag, ticket 19)
+summary_every_s = 1  # the detection summary in the session log (spec §10)
+
+[blind]
+freeze_s = 5  # no fresh frame this long is Blind (routine freezes are 2-4 s)
+reconnect_every_s = 5  # while the media session or the daemon is down, try again this often
+restored_event_after_s = 30  # a Blind spell longer than this ends with `link.restored`, which wakes the agent
+check_s = 0.5  # how often the link watch reads the media hub's arrival times
+daemon_check_s = 5  # how often the link watch asks the daemon's status while the link is up
+sleep_detect_s = 2  # a jump in slept time this big between two conductor ticks is the Mac waking from sleep
+
+[frame]
+pitch_deg = 0
+
+[reframe]
+offcentre = 0.15
+hold_s = 3
+gain_per_deg = 0.0082
+speed_dps = 20  # one smooth yaw move at this speed (ticket 19's validated correction)
+min_move_s = 0.8  # a small correction still takes this long, so it stays smooth
+
+[sweep]
+after_no_person_s = 10
+speed_dps = 40
+head_range_deg = 55  # the head alone searches this far either side of the body first (the SDK allows 65°)
+body_range_deg = 90  # then the body turns, up to this far either side of straight ahead; framing keeps it here too
+found_conf = 0.7  # a sweep stops on a `person` this sure (the owner reads ~0.95; false finds came at 0.37-0.5)
+found_frames = 3  # ... in this many frames in a row; after a sweep, a less sure person isn't the owner back
+step_hz = 50  # how often a sweep steps the head target
+start_look_s = 1  # at session start, nobody in still frames this long means nobody is in frame: sweep at once
+
+[session]
+duration_default_min = 25
+duration_min_min = 5
+duration_max_min = 120
+extend_default_min = 10
+extend_grace_min = 2
+pause_max_min = 30
+
+[excuse]
+default_min = 5
+
+[nudge]
+min_gap_s = 15
+
+[followup]
+min_delay_s = 20
+
+[hooks]
+max_active = 5
+min_refire_s = 60
+
+[conductor]
+tick_s = 0.25  # how often the session clock is read and queued events are offered to the agent
+stuck_after_s = 20  # a wake-up showing no activity this long stops holding events (Sonny speaking always holds them)
+
+[idle]
+conversation_keep_s = 60  # an idle conversation's context lives this long after its last turn or line; the wake window stays [wake] window_s
+
+[head]
+emotions_dataset = "pollen-robotics/reachy-mini-emotions-library"  # played through the daemon REST route
+tracking_weight = 1  # daemon face tracking in an idle conversation
+glide_s = 1  # duration of a glide between modes, and of the restore after a move
+rest_antenna_rad = 0.1745  # antennas at rest are [-a, +a] (the SDK's neutral, ~10° off vertical)
+move_poll_s = 0.1  # how often a running move, or a line it waits for, is checked
+move_timeout_s = 30  # a move still running after this is stopped
+line_wait_s = 20  # a move waits at most this long for the line before it to be spoken
+cue_timeout_s = 5  # a granted play_emotion whose cue never reaches the line gate stops making others busy
+motors_check_s = 5  # how often an idle head owner asks the daemon whether the motors are up (play_emotion: unavailable)
+
+[dashboard]  # the live page Sonny serves while it runs (ADR 0005), always on 127.0.0.1, never the LAN
+port = 8042
+open_browser = false  # true opens a browser tab on the Dashboard once Sonny is ready
+# /ws/camera (spec §5): frames scaled to fit camera_width x camera_height, as JPEG, only while a tab watches
+camera_width = 960
+camera_height = 540
+camera_jpeg_quality = 75
+camera_fps = 15  # most frames a second per tab in a Focus Session
+camera_idle_fps = 5  # outside a session (or in a Pause): raw frames, no boxes
+dev_port = 5173  # the Vite dev server (web/), whose pages may also open Sonny's sockets; any other site may not
+recent_max = 500  # envelopes `sonny-focus-companion.snapshot` hands a page that connects (its `recent`)
+health_every_s = 1.0  # how often the state feed sends a `health` envelope (link, fps, detect ms, lag, LLM s)
+clear_after_s = 60  # how long the page shows a session that ended (its summary) before it clears to resting

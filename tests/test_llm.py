@@ -8,8 +8,8 @@ from pipecat.frames.frames import ErrorFrame, LLMContextFrame, LLMFullResponseEn
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.tests.utils import run_test
 
-from sonny.config import load_config
-from sonny.voice.llm import CappedOpenRouterLLM, LlmCall, _after_tool_results
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.voice.llm import CappedOpenRouterLLM, LlmCall, _after_tool_results
 
 CFG = load_config()
 CAP_S = 0.3

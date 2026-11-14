@@ -8,7 +8,7 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.tests.utils import SleepFrame, run_test
 
-from sonny.voice.gate import MoveCue, MoveGate
+from sonny_focus_companion.voice.gate import MoveCue, MoveGate
 
 
 class FakeHead:

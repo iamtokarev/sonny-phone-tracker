@@ -1,5 +1,5 @@
 [project]
-name = "sonny"
+name = "sonny-focus-companion"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -16,11 +16,11 @@ dependencies = [
 keywords = ["reachy-mini-app"]
 
 [project.scripts]
-sonny = "sonny.main:main"
-sonny-dashboard-dev = "sonny.dashboard.dev:main"
+sonny-focus-companion = "sonny_focus_companion.main:main"
+sonny-focus-companion-dashboard-dev = "sonny_focus_companion.dashboard.dev:main"
 
 [project.entry-points."reachy_mini_apps"]
-sonny = "sonny.main:Sonny"
+sonny_focus_companion = "sonny_focus_companion.main:SonnyFocusCompanion"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13"]
@@ -47,7 +47,7 @@ environments = ["sys_platform == 'darwin'"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-m 'not live'"
-markers = ["live: calls the hosted LLM; opt-in with SONNY_LIVE=1 and -m live"]
+markers = ["live: calls the hosted LLM; opt-in with SONNY_FOCUS_COMPANION_LIVE=1 and -m live"]
 
 [tool.ruff]
 line-length = 120

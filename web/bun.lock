@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "sonny-dashboard",
+      "name": "sonny-focus-companion-dashboard",
       "dependencies": {
         "@fontsource/archivo-black": "5.3.0",
         "@fontsource/ibm-plex-mono": "5.3.0",

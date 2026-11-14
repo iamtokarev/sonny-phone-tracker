@@ -1,6 +1,8 @@
 // The owner's PAUSE FEED choice, remembered in localStorage when the browser allows, so a reload stays paused
 // (and connects to /ws/camera already off: see socket.ts).
-const KEY = "sonny.camera.feedOff";
+import { readMigratedPreference } from "../savedPreference";
+
+const KEY = "sonny-focus-companion.camera.feedOff";
 
 type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 
@@ -13,7 +15,7 @@ export function feedOffChoice(storage: Storage | null): FeedOffChoice {
   return {
     read() {
       try {
-        return storage?.getItem(KEY) === "1";
+        return readMigratedPreference(storage, KEY, "sonny.camera.feedOff") === "1";
       } catch {
         return false; // private window or blocked site data: the feed starts on
       }

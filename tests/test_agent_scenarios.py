@@ -3,9 +3,9 @@
 The scripted agent checks the code side. The live runs check the prompt and model against the same
 scenarios; they cost money and take minutes, so they are opt-in:
 
-    SONNY_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
+    SONNY_FOCUS_COMPANION_LIVE=1 uv run pytest -m live -s tests/test_agent_scenarios.py
 
-`SONNY_LIVE_RUNS` sets the runs per scenario (default 3). Transcripts go to `logs/agent-replay/`.
+`SONNY_FOCUS_COMPANION_LIVE_RUNS` sets the runs per scenario (default 3). Transcripts go to `logs/agent-replay/`.
 """
 
 import os
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from dotenv import find_dotenv, load_dotenv
 
-from sonny.config import load_config
+from sonny_focus_companion.config import load_config
 from tests.agent_replay import SCENARIOS, Replay, ScriptedAgent, generic_checks, run_scenario
 
 CFG = load_config()
@@ -142,13 +142,15 @@ def _list_hooks() -> dict:
 
 
 @pytest.mark.live
-@pytest.mark.skipif(not os.environ.get("SONNY_LIVE"), reason="live model runs are opt-in: SONNY_LIVE=1")
+@pytest.mark.skipif(
+    not os.environ.get("SONNY_FOCUS_COMPANION_LIVE"), reason="live model runs are opt-in: SONNY_FOCUS_COMPANION_LIVE=1"
+)
 def test_live_model_holds_the_contract(tmp_path):
     from tests.agent_replay import LiveAgent
 
     load_dotenv(find_dotenv(usecwd=True))
     agent = LiveAgent(CFG, os.environ[CFG.llm.api_key_env])
-    runs = int(os.environ.get("SONNY_LIVE_RUNS", "3"))
+    runs = int(os.environ.get("SONNY_FOCUS_COMPANION_LIVE_RUNS", "3"))
     out = Path(CFG.log.dir) / "agent-replay" / CFG.llm.model.replace("/", "_")
     out.mkdir(parents=True, exist_ok=True)
     by_check: dict[tuple[str, str], list[bool]] = defaultdict(list)

@@ -7,10 +7,10 @@ import time
 
 import pytest
 
-from sonny.attention import Box, Detections
-from sonny.config import load_config
-from sonny.framing import Framing, Reframe
-from sonny.head import HeadOwner
+from sonny_focus_companion.attention import Box, Detections
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.framing import Framing, Reframe
+from sonny_focus_companion.head import HeadOwner
 from tests.fakes import FakeRobot
 
 CFG = load_config()

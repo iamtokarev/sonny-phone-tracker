@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from sonny.config import load_config
-from sonny.dashboard.feed import DashboardFeed
-from sonny.events import Event, EventBus, EventType
-from sonny.session_log import SessionLog
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.feed import DashboardFeed
+from sonny_focus_companion.events import Event, EventBus, EventType
+from sonny_focus_companion.session_log import SessionLog
 
 CFG = load_config().dashboard
 ROOT = Path(__file__).parents[1]
@@ -246,7 +246,7 @@ class Clock:
 
 
 def test_each_health_tick_sends_link_camera_detector_and_llm_readings():
-    from sonny.dashboard.feed import Readings
+    from sonny_focus_companion.dashboard.feed import Readings
 
     clock = Clock(1000.0)
     feed, sent = feed_with_sink(now=clock)
@@ -281,7 +281,7 @@ def test_the_health_thread_ticks_until_stopped():
     import dataclasses
     import threading
 
-    from sonny.dashboard.feed import Readings
+    from sonny_focus_companion.dashboard.feed import Readings
 
     feed, sent = feed_with_sink()
     feed.cfg = dataclasses.replace(CFG, health_every_s=0.01)

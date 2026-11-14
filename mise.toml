@@ -2,7 +2,7 @@
 description = "Start Sonny with the Dashboard (requires the robot and API key)"
 alias = "start"
 depends = ["build"]
-run = "uv run --locked sonny"
+run = "uv run --locked sonny-focus-companion"
 
 [tools]
 uv = "0.12.5"
@@ -33,7 +33,7 @@ dir = "web"
 run = "bun run build"
 # Skipped while the build is newer than every input, so `mise run app` starts without rebuilding.
 sources = ["src/**/*", "index.html", "package.json", "bun.lock", "tsconfig.json", "vite.config.ts"]
-outputs = ["../src/sonny/static/index.html"]
+outputs = ["../src/sonny_focus_companion/static/index.html"]
 
 [tasks.dev]
 description = "Run the robot-free Dashboard backend and Vite; Ctrl-C stops both"
@@ -42,7 +42,7 @@ run = [{ tasks = ["dev:backend", "dev:web"] }]
 [tasks."dev:backend"]
 description = "Run the robot-free backend; accepts --log, --speed, --webcam or --clip"
 depends = ["python:install"]
-run = "uv run --locked sonny-dashboard-dev"
+run = "uv run --locked sonny-focus-companion-dashboard-dev"
 
 [tasks."dev:web"]
 description = "Run Vite against the backend on port 8042"

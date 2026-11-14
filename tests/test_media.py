@@ -7,8 +7,8 @@ import time
 import numpy as np
 import pytest
 
-from sonny.config import load_config
-from sonny.media import MediaHub
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.media import MediaHub
 from tests.fakes import FakeMedia, FakeMini
 
 CFG = load_config()

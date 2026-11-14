@@ -1,8 +1,8 @@
 """The conductor (spec §6 system hooks, §7 "Conductor and history"): what wakes the agent, the queue, and
 the wake-up message."""
 
-from sonny.events import EndReason, Event, EventType
-from sonny.focus.conductor import Conductor, is_wakeup, wakeup_payload
+from sonny_focus_companion.events import EndReason, Event, EventType
+from sonny_focus_companion.focus.conductor import Conductor, is_wakeup, wakeup_payload
 
 SNAP = {"session": {"task": "email", "remaining_min": 12.0}}
 

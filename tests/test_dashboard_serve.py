@@ -3,10 +3,10 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from sonny.config import load_config
-from sonny.dashboard.camera import CameraFeed
-from sonny.dashboard.feed import DashboardFeed
-from sonny.dashboard.serve import announce, dashboard_url, mount_routes
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.camera import CameraFeed
+from sonny_focus_companion.dashboard.feed import DashboardFeed
+from sonny_focus_companion.dashboard.serve import announce, dashboard_url, mount_routes
 
 CFG = load_config().dashboard
 
@@ -28,7 +28,7 @@ def test_mount_routes_serves_the_feed_and_the_camera():
     mount_routes(app, DashboardFeed(CFG), CameraFeed(CFG))
     with TestClient(app) as client:
         with client.websocket_connect("/rpc") as ws:
-            ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}})
+            ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny-focus-companion.snapshot", "params": {}})
             assert ws.receive_json()["result"]["session"] is None
         with client.websocket_connect("/ws/camera"):
             pass

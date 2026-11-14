@@ -1,5 +1,5 @@
 // One /ws/camera message (spec §5): `u32 header_len (little-endian) | JSON header | JPEG`.
-// Hand-written to match the header documented in src/sonny/dashboard/camera.py; change both together.
+// Hand-written to match the header documented in src/sonny_focus_companion/dashboard/camera.py; change both together.
 
 /** A detection box in source-frame pixels (the frame is `w` x `h`; the JPEG may be smaller). */
 export interface CameraBox {

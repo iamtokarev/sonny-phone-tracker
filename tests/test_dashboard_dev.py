@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from sonny.attention import AttentionState
-from sonny.config import load_config
-from sonny.dashboard.dev import Replayer, build_app, placeholder_frame
-from sonny.dashboard.feed import DashboardFeed
+from sonny_focus_companion.attention import AttentionState
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.dashboard.dev import Replayer, build_app, placeholder_frame
+from sonny_focus_companion.dashboard.feed import DashboardFeed
 from tests.test_dashboard_feed import recorded_logs
 
 CFG = load_config().dashboard
@@ -137,7 +137,7 @@ def test_the_dev_app_serves_sonnys_feed_and_camera_routes():
     feed.on_record({"ts": 100.0, "type": "session.started", "task": "Email", "duration_min": 10})
     with TestClient(app) as client:
         with client.websocket_connect("/rpc") as ws:
-            ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}})
+            ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny-focus-companion.snapshot", "params": {}})
             assert ws.receive_json()["result"]["session"]["task"] == "Email"
         with client.websocket_connect("/ws/camera") as ws:
             image, d = placeholder_frame(1.0, "phone_use")
@@ -154,7 +154,7 @@ def test_the_dev_app_binds_127_0_0_1_only(monkeypatch, capsys):
 
     bound: list[tuple[str, int]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, host, port, **kw: bound.append((host, port)))
-    from sonny.dashboard import dev
+    from sonny_focus_companion.dashboard import dev
 
     assert dev.main([]) == 0
     assert bound == [("127.0.0.1", CFG.port)]

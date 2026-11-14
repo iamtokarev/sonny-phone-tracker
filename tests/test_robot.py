@@ -8,9 +8,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 import pytest
 
-from sonny.config import load_config
-from sonny.daemon import DaemonClient, DaemonError
-from sonny.robot import ReachyRobot
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.daemon import DaemonClient, DaemonError
+from sonny_focus_companion.robot import ReachyRobot
 
 CFG = load_config()
 DATASET = CFG.head.emotions_dataset

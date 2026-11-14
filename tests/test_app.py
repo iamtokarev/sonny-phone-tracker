@@ -7,12 +7,12 @@ from typing import ClassVar
 
 import pytest
 
-import sonny.main as main_mod
-from sonny.config import load_config
-from sonny.daemon import StartupError
-from sonny.main import Sonny
-from sonny.robot import ReachyRobot
-from sonny.session_log import SessionLog
+import sonny_focus_companion.main as main_mod
+from sonny_focus_companion.config import load_config
+from sonny_focus_companion.daemon import StartupError
+from sonny_focus_companion.main import SonnyFocusCompanion
+from sonny_focus_companion.robot import ReachyRobot
+from sonny_focus_companion.session_log import SessionLog
 from tests.fakes import FakeMedia, FakeMini
 
 CFG = load_config()
@@ -65,7 +65,7 @@ def readers_stopped() -> bool:
 
 @pytest.fixture
 def app(tmp_path):
-    return Sonny(CFG, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
+    return SonnyFocusCompanion(CFG, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
 
 
 def speaker_up_after(fake: FakeMedia, seconds: float) -> None:
@@ -73,7 +73,10 @@ def speaker_up_after(fake: FakeMedia, seconds: float) -> None:
 
 
 def readers_alive() -> bool:
-    return any(t.name in {"sonny-video", "sonny-audio"} and t.is_alive() for t in threading.enumerate())
+    return any(
+        t.name in {"sonny-focus-companion-video", "sonny-focus-companion-audio"} and t.is_alive()
+        for t in threading.enumerate()
+    )
 
 
 class StopAfterReady(threading.Event):
@@ -110,7 +113,9 @@ def test_speaker_timeout_prints_one_line_and_sleeps(tmp_path, logs):
 
     cfg = dataclasses.replace(CFG, startup=dataclasses.replace(CFG.startup, speaker_wait_timeout_s=0.1))
     mini = FakeMini()
-    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, threading.Event())
+    SonnyFocusCompanion(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(
+        mini, threading.Event()
+    )
     out = logs.text
     assert "ready" not in out and "speaker" in out
     assert mini.calls[-1] == "goto_sleep"
@@ -168,7 +173,7 @@ def test_main_refuses_and_exits_before_connecting(monkeypatch, capsys):
         raise StartupError("A dashboard app is running on Sonny: stop marionette in Sonny's dashboard first.")
 
     monkeypatch.setattr(main_mod, "check_startup", refuse)
-    monkeypatch.setattr(main_mod, "Sonny", lambda *a, **k: pytest.fail("app must not start"))
+    monkeypatch.setattr(main_mod, "SonnyFocusCompanion", lambda *a, **k: pytest.fail("app must not start"))
     assert main_mod.main([]) == 1
     assert (
         capsys.readouterr()
@@ -214,7 +219,9 @@ def test_on_ready_sonny_prints_the_dashboard_url_and_opens_a_tab_only_if_asked(
     monkeypatch.setattr(main_mod.webbrowser, "open", opened.append)
     mini = FakeMini()
     speaker_up_after(mini.media, 0.05)
-    Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(mini, StopAfterReady())
+    SonnyFocusCompanion(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink).run(
+        mini, StopAfterReady()
+    )
     assert "INFO dash Dashboard: http://127.0.0.1:8042" in logs
     assert opened == (["http://127.0.0.1:8042"] if open_browser else [])
 
@@ -263,7 +270,7 @@ def dashboard_app(monkeypatch, tmp_path):
     monkeypatch.setattr(base, "ReachyMini", lambda *a, **k: contextlib.nullcontext(FakeMini()))
     servers = Servers(monkeypatch)
     cfg = dataclasses.replace(CFG, dashboard=dataclasses.replace(CFG.dashboard, port=free_port()))
-    app = Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
+    app = SonnyFocusCompanion(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
     return app, servers
 
 
@@ -345,7 +352,7 @@ def test_the_voice_pipeline_gets_the_camera_feed(tmp_path):
         seen.extend(args)
         return FakeVoice()
 
-    app = Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
+    app = SonnyFocusCompanion(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
     mini = FakeMini()
     speaker_up_after(mini.media, 0.05)
     app.run(mini, StopAfterReady())
@@ -362,7 +369,7 @@ def test_the_models_load_while_the_speaker_link_comes_up(tmp_path, logs):
         assert mini.media.audio._appsrc is None  # the speaker link isn't up yet
         return FakeVoice()
 
-    app = Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
+    app = SonnyFocusCompanion(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink)
     threading.Thread(target=lambda: loading.wait(5) and setattr(mini.media.audio, "_appsrc", object())).start()
     app.run(mini, StopAfterReady())
     assert logs.text.count("ready") == 1
@@ -375,7 +382,9 @@ def test_a_failed_voice_load_still_quits_cleanly(tmp_path):
     mini = FakeMini()
     speaker_up_after(mini.media, 0.05)
     with pytest.raises(RuntimeError, match="no models"):
-        Sonny(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink).run(mini, threading.Event())
+        SonnyFocusCompanion(CFG, log=SessionLog(tmp_path), voice=voice, robot=robot, link=FakeLink).run(
+            mini, threading.Event()
+        )
     assert mini.calls[-2:] == ["stop_head_tracking", "goto_sleep"]
     assert not readers_alive()
 
@@ -388,7 +397,7 @@ def test_quitting_with_the_state_feed_open_does_not_hang(dashboard_app):
     t = run_in_thread(app)
     servers.wait_listening()
     with connect(f"ws://127.0.0.1:{app.cfg.dashboard.port}/rpc") as ws:
-        ws.send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}}))
+        ws.send(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "sonny-focus-companion.snapshot", "params": {}}))
         assert json.loads(ws.recv(timeout=5))["result"]["seq"] == 0
         app.stop()
         t.join(5)
@@ -398,19 +407,19 @@ def test_quitting_with_the_state_feed_open_does_not_hang(dashboard_app):
 def test_the_page_gets_what_sonny_logs_and_publishes_over_rpc(app):
     from fastapi.testclient import TestClient
 
-    from sonny.events import Event, EventType
+    from sonny_focus_companion.events import Event, EventType
 
     app.bus.publish(Event(EventType.LINK_RESTORED, {"seconds": 3.0}))  # before any page connects
     with TestClient(app.settings_app) as client, client.websocket_connect("/rpc") as ws:
-        ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny.snapshot", "params": {}})
+        ws.send_json({"jsonrpc": "2.0", "id": 1, "method": "sonny-focus-companion.snapshot", "params": {}})
         snap = ws.receive_json()["result"]
         assert [e["type"] for e in snap["recent"]] == ["link.restored"]
         app.log.idle.write("wake", score=0.95)
         notes = [ws.receive_json() for _ in range(2)]
         # The snapshot sent the bus event out too; a page drops envelopes with seq <= snapshot.seq.
         assert [(n["method"], n["params"]["seq"], n["params"]["type"]) for n in notes] == [
-            ("sonny.event", 1, "link.restored"),
-            ("sonny.event", 2, "wake"),
+            ("sonny-focus-companion.event", 1, "link.restored"),
+            ("sonny-focus-companion.event", 2, "wake"),
         ]
         assert snap["seq"] == 1
 
@@ -419,7 +428,7 @@ def test_health_ticks_run_while_sonny_runs_and_stop_at_quit(tmp_path):
     import dataclasses
 
     cfg = dataclasses.replace(CFG, dashboard=dataclasses.replace(CFG.dashboard, health_every_s=0.01))
-    app = Sonny(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
+    app = SonnyFocusCompanion(cfg, log=SessionLog(tmp_path), voice=FakeVoice, robot=robot, link=FakeLink)
     ticks: list[dict] = []
     app.feed.listen(lambda e: e["type"] == "health" and ticks.append(e["data"]))
 
@@ -435,4 +444,4 @@ def test_health_ticks_run_while_sonny_runs_and_stop_at_quit(tmp_path):
     speaker_up_after(mini.media, 0.05)
     app.run(mini, StopAfterTicks())
     assert ticks[-1]["down"] is None
-    assert not any(t.name == "sonny-dashboard-health" and t.is_alive() for t in threading.enumerate())
+    assert not any(t.name == "sonny-focus-companion-dashboard-health" and t.is_alive() for t in threading.enumerate())
